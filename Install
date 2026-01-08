@@ -1,0 +1,287 @@
+#!/bin/bash
+
+# Use APP_DIR if set by app-manager, otherwise use current directory
+APP_DIR="${APP_DIR:-$(pwd)}"
+OPKG_CMD_PREFIX="opkg install --force-depends"
+OPKG_CMD_PREFIX_R="opkg remove --force-depends "
+MANIFEST="${APP_DIR}/provisioning/p_manifest.json"
+NAME="Install"
+
+# Log the script invocation with argument
+echo "Install script called with argument: $1"
+logger -t Install "Install script called with argument: $1"
+logger -t Install "APP_DIR: $APP_DIR"
+logger -t Install "Current directory: $(pwd)"
+
+#
+# This function is called via the install argument.  It is invoked by the
+# app-manager process during the install of a custom app.  It reads the
+# p_manifest.json file in the provisioning directory of the application,
+# and executes an "opkg install" on each package file listed in the p_manifest.
+#
+function install_packages {
+    if [ ! -f "$MANIFEST" ]; then
+        echo "Manifest file not found: $MANIFEST"
+        logger -t Install "Manifest file not found: $MANIFEST"
+        return
+    fi
+    JSONTXT=$(<"$MANIFEST")
+    PKGCNT=$(echo $JSONTXT | jsparser --count -p /pkgs)
+
+    RETURNCODE=$?
+    if [ $RETURNCODE -ne 0 ]; then
+      echo "Failed to parse p_manifest.json as json"
+      logger -t Install "Failed to parse p_manifest.json as json"
+      exit $RETURNCODE
+    fi
+
+    for ((i=0; i < PKGCNT; i++))
+    do
+        PKG=$(echo $JSONTXT | jsparser --jsobj -p /pkgs/$i)
+        PKGNM=$(echo $PKG | jsparser -p /FileName)
+        PKGTYPE=$(echo $PKG | jsparser -p /type)
+
+        if [ "$PKGTYPE" == "ipk" ]; then
+            PKGFILE="${APP_DIR}/provisioning/${PKGNM}"
+            PKGCMD="${OPKG_CMD_PREFIX} \"${PKGFILE}\""
+            echo "Executing: $PKGCMD"
+            logger -t Install "Executing: $PKGCMD"
+            echo "Package file: $PKGFILE"
+            logger -t Install "Package file: $PKGFILE"
+            
+            # Check if file exists
+            if [ ! -f "$PKGFILE" ]; then
+                echo "ERROR: Package file not found: $PKGFILE"
+                logger -t Install "ERROR: Package file not found: $PKGFILE"
+                exit 1
+            fi
+            
+            # Execute opkg install directly without eval to avoid quote issues
+            INSTALL_OUTPUT=$(opkg install --force-depends "$PKGFILE" 2>&1)
+            RETURNCODE=$?
+            echo "$INSTALL_OUTPUT"
+            echo "$INSTALL_OUTPUT" | logger -t Install
+            
+            if [ $RETURNCODE -ne 0 ]; then
+                # Check if error is because package is already installed
+                echo "$INSTALL_OUTPUT" | grep -i "matches the installed version\|already installed\|is up to date" >/dev/null 2>&1
+                if [ $? -eq 0 ]; then
+                    echo "Package already installed (same version) - treating as success"
+                    logger -t Install "Package already installed (same version) - treating as success"
+                    RETURNCODE=0
+                else
+                    echo "Command failed with status $RETURNCODE"
+                    logger -t Install "Command failed with status $RETURNCODE"
+                    exit $RETURNCODE
+                fi
+            fi
+            
+            if [ $RETURNCODE -eq 0 ]; then
+                echo "Command succeeded"
+                logger -t Install "Command succeeded"
+            fi
+        fi
+    done
+}
+
+#
+# This function is called via the remove argument.  It is invoked by app-manager
+# during the uninstall of a custom app.  It reads the p_manifest.json file in
+# the provisioning directory of the application and executes an "opkg remove"
+# on each package listed in the p_manifest.json.
+#
+function remove_packages {
+    if [ ! -f "$MANIFEST" ]; then
+        echo "provisioning manifest file not found: $MANIFEST"
+        logger -t Install "provisioning manifest file not found: $MANIFEST"
+        return 0
+    fi
+    JSONTXT=$(<"$MANIFEST")
+    PKGCNT=$(echo $JSONTXT | jsparser --count -p /pkgs)
+
+    RETURNCODE=$?
+    if [ $RETURNCODE -ne 0 ]; then
+      echo "Failed to parse p_manifest.json as json"
+      logger -t Install "Failed to parse p_manifest.json as json"
+      exit $RETURNCODE
+    fi
+
+    for ((i=0; i < PKGCNT; i++))
+    do
+        PKG=$(echo $JSONTXT | jsparser --jsobj -p /pkgs/$i)
+        PKGNM=$(echo $PKG | jsparser -p /PkgName)
+        PKGTYPE=$(echo $PKG | jsparser -p /type)
+
+        if [ "$PKGTYPE" == "ipk" ]; then
+            echo "Removing package: $PKGNM"
+            logger -t Install "Removing package: $PKGNM"
+            REMOVE_OUTPUT=$(opkg remove --force-depends "$PKGNM" 2>&1)
+            REMOVE_RC=$?
+            echo "$REMOVE_OUTPUT"
+            echo "$REMOVE_OUTPUT" | logger -t Install
+            
+            # Don't fail if package is not installed
+            if [ $REMOVE_RC -ne 0 ]; then
+                echo "Package removal returned status $REMOVE_RC (may not be installed)"
+                logger -t Install "Package removal returned status $REMOVE_RC (may not be installed)"
+                # Continue anyway - package might not be installed
+            else
+                echo "Package $PKGNM removed successfully"
+                logger -t Install "Package $PKGNM removed successfully"
+            fi
+        fi
+    done
+    return 0
+}
+
+#
+# The Install script is invoked with the postinstall argument by the app-manager
+# process after it has install an application succesfully and before it tries
+# to start the app.  One example of something that might be done by this
+# function would be to reboot the Conduit after the install if necessary.
+#
+function post_install {
+    pip3 install -r requirements.txt
+    
+    # Configure firewall to allow port 5000
+    echo "Configuring firewall to allow port 5000..."
+    logger -t Install "Configuring firewall to allow port 5000..."
+    
+    # Check if iptables is available
+    if command -v iptables >/dev/null 2>&1; then
+        # Check if rule already exists
+        iptables -C INPUT -p tcp --dport 5000 -j ACCEPT 2>/dev/null
+        if [ $? -ne 0 ]; then
+            # Rule doesn't exist, add it
+            iptables -I INPUT -p tcp --dport 5000 -j ACCEPT
+            echo "Added INPUT firewall rule for port 5000"
+            logger -t Install "Added INPUT firewall rule for port 5000"
+        else
+            echo "Firewall rule for port 5000 already exists"
+            logger -t Install "Firewall rule for port 5000 already exists"
+        fi
+        
+        # Also add FORWARD rule in case of forwarding
+        iptables -C FORWARD -p tcp --dport 5000 -j ACCEPT 2>/dev/null
+        if [ $? -ne 0 ]; then
+            iptables -I FORWARD -p tcp --dport 5000 -j ACCEPT
+            echo "Added FORWARD firewall rule for port 5000"
+            logger -t Install "Added FORWARD firewall rule for port 5000"
+        fi
+        
+        # Try to save the rules
+        if [ -f /etc/iptables.rules ]; then
+            iptables-save > /etc/iptables.rules 2>/dev/null && echo "Saved firewall rules" || echo "Warning: Could not save firewall rules"
+        elif [ -d /etc/iptables ]; then
+            iptables-save > /etc/iptables/rules.v4 2>/dev/null && echo "Saved firewall rules" || echo "Warning: Could not save firewall rules"
+        else
+            echo "Note: Firewall rules added but may not persist across reboots"
+            logger -t Install "Note: Firewall rules added but may not persist across reboots"
+        fi
+    else
+        echo "Warning: iptables not found, cannot configure firewall automatically"
+        logger -t Install "Warning: iptables not found, cannot configure firewall automatically"
+        echo "You may need to manually configure firewall rules in the gateway web interface"
+        logger -t Install "You may need to manually configure firewall rules in the gateway web interface"
+    fi
+}
+
+#
+# The Install script is invoked with the postremove argument by the app-manager
+# process after it has removed an application succesfully. One example of 
+# something that might be done by this function would be to reboot the Conduit 
+# after the remove if necessary.
+#
+function post_remove {
+    echo "post_remove"
+    logger -t Install "post_remove"
+    
+    # Remove firewall rules for port 5000
+    echo "Removing firewall rules for port 5000..."
+    logger -t Install "Removing firewall rules for port 5000..."
+    
+    if command -v iptables >/dev/null 2>&1; then
+        # Remove INPUT rule
+        iptables -D INPUT -p tcp --dport 5000 -j ACCEPT 2>/dev/null && echo "Removed INPUT firewall rule" || echo "INPUT rule not found or already removed"
+        
+        # Remove FORWARD rule
+        iptables -D FORWARD -p tcp --dport 5000 -j ACCEPT 2>/dev/null && echo "Removed FORWARD firewall rule" || echo "FORWARD rule not found or already removed"
+        
+        # Try to save the rules
+        if [ -f /etc/iptables.rules ]; then
+            iptables-save > /etc/iptables.rules 2>/dev/null
+        elif [ -d /etc/iptables ]; then
+            iptables-save > /etc/iptables/rules.v4 2>/dev/null
+        fi
+    fi
+}
+
+case "$1" in
+  install)
+      echo "=== INSTALL STEP STARTED ==="
+      logger -t Install "=== INSTALL STEP STARTED ==="
+      echo -n "Installing dependencies: "
+      logger -t Install "Installing Dependencies: "
+      install_packages
+      INSTALL_RC=$?
+      if [ $INSTALL_RC -ne 0 ]; then
+          echo "ERROR: install_packages failed with status $INSTALL_RC"
+          logger -t Install "ERROR: install_packages failed with status $INSTALL_RC"
+          exit $INSTALL_RC
+      fi
+      echo "$NAME."
+      echo "=== INSTALL STEP COMPLETED ==="
+      logger -t Install "=== INSTALL STEP COMPLETED ==="
+      ;;
+  remove)
+      echo "=== REMOVE STEP STARTED ==="
+      logger -t Install "=== REMOVE STEP STARTED ==="
+      echo -n "Removing Dependencies: "
+      logger -t Install "Removing Dependencies: "
+      remove_packages
+      REMOVE_RC=$?
+      if [ $REMOVE_RC -ne 0 ]; then
+          echo "ERROR: remove_packages failed with status $REMOVE_RC"
+          logger -t Install "ERROR: remove_packages failed with status $REMOVE_RC"
+          exit $REMOVE_RC
+      fi
+      echo "$NAME."
+      echo "=== REMOVE STEP COMPLETED ==="
+      logger -t Install "=== REMOVE STEP COMPLETED ==="
+      ;;
+  postinstall)
+      echo "=== POSTINSTALL STEP STARTED ==="
+      logger -t Install "=== POSTINSTALL STEP STARTED ==="
+      echo -n "Running app post install "
+      logger -t Install "Running app post install "
+      post_install
+      POSTINSTALL_RC=$?
+      if [ $POSTINSTALL_RC -ne 0 ]; then
+          echo "ERROR: post_install failed with status $POSTINSTALL_RC"
+          logger -t Install "ERROR: post_install failed with status $POSTINSTALL_RC"
+          exit $POSTINSTALL_RC
+      fi
+      echo "$NAME."
+      echo "=== POSTINSTALL STEP COMPLETED ==="
+      logger -t Install "=== POSTINSTALL STEP COMPLETED ==="
+      ;;
+  postremove)
+      echo "=== POSTREMOVE STEP STARTED ==="
+      logger -t Install "=== POSTREMOVE STEP STARTED ==="
+      echo -n "Running app post remove "
+      logger -t Install "Running app post remove "
+      post_remove
+      echo "$NAME."
+      echo "=== POSTREMOVE STEP COMPLETED ==="
+      logger -t Install "=== POSTREMOVE STEP COMPLETED ==="
+      ;;
+  *)
+      N=$NAME
+      echo "Usage: $N {install|remove|postinstall|postremove}" >&2
+      logger -t Install "ERROR: Invalid argument: $1"
+      exit 1
+      ;;
+esac
+
+exit 0
+

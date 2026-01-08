@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadioBridge Downlinks</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+    <div class="container">
+        <div class="my-logo">
+            <img src="MultiTech_Logo.png" alt="MultiTech Logo">
+            <h1>RadioBridge Downlink Scheduler</h1>
+        </div>
+    </div>
+</header>
+
+<nav>
+    <div class="nav-leftside">
+        <ul>
+            <li class="item">
+                <a href="index.html">Home</a>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<section>
+    <div class="container">
+        <h2 class="section-title">Connect to LoRa Network Server MQTT</h2>
+        <form id="connectForm" onsubmit="connectToBroker(event)">
+            <label for="broker">Broker (usually localhost):</label>
+            <input type="text" id="broker" name="broker" value="localhost">
+
+            <label for="port">Port:</label>
+            <input type="number" id="port" name="port" value="1883">
+
+            <label for="topic">Uplink Topic:</label>
+            <input type="text" id="topic" name="topic" value="lora/+/up">
+
+            <button type="submit">Connect</button>
+        </form>
+
+        <h2 class="section-title">Select Sensor</h2>
+        <label for="sensorSelect">Discovered sensors (from uplinks):</label>
+        <select id="sensorSelect">
+            <option value="">-- Waiting for uplinks on MQTT --</option>
+        </select>
+
+        <h2 class="section-title">Configure Downlink</h2>
+        <div id="waterSensorConfig" style="display:none;">
+            <h3>Water Leak Sensor</h3>
+            <label>Enable Water Present Event:
+                <input type="radio" name="enable_water_present" value="1" checked> Yes
+                <input type="radio" name="enable_water_present" value="0"> No
+            </label>
+            <label>Enable Water Not Present Event:
+                <input type="radio" name="enable_water_not_present" value="1" checked> Yes
+                <input type="radio" name="enable_water_not_present" value="0"> No
+            </label>
+            <label for="threshold">Threshold (0-255):</label>
+            <input type="number" id="threshold" min="0" max="255" value="128">
+            <label for="restoral">Restoral (0-255):</label>
+            <input type="number" id="restoral" min="0" max="255" value="10">
+        </div>
+
+        <div id="tempHumiditySensorConfig" style="display:none;">
+            <h3>Temperature &amp; Humidity Sensor</h3>
+            <label for="mode">Mode:</label>
+            <select id="mode">
+                <option value="0x00">Threshold Mode</option>
+                <option value="0x01">Report-on-Change Mode</option>
+            </select>
+
+            <div id="thresholdModeConfig">
+                <label for="reportingInterval">Reporting Interval:</label>
+                <input type="number" id="reportingInterval" value="10">
+
+                <label for="restoralMarginTemp">Temp Restoral Margin:</label>
+                <input type="number" id="restoralMarginTemp" value="2">
+
+                <label for="lowerTempThreshold">Lower Temp Threshold:</label>
+                <input type="number" id="lowerTempThreshold" value="60">
+
+                <label for="upperTempThreshold">Upper Temp Threshold:</label>
+                <input type="number" id="upperTempThreshold" value="80">
+
+                <label for="restoralMarginHumidity">Humidity Restoral Margin:</label>
+                <input type="number" id="restoralMarginHumidity" value="5">
+
+                <label for="lowerHumidityThreshold">Lower Humidity Threshold:</label>
+                <input type="number" id="lowerHumidityThreshold" value="20">
+
+                <label for="upperHumidityThreshold">Upper Humidity Threshold:</label>
+                <input type="number" id="upperHumidityThreshold" value="80">
+            </div>
+
+            <div id="reportOnChangeConfig" style="display:none;">
+                <label for="tempIncrease">Temp Increase (&deg;F):</label>
+                <input type="number" id="tempIncrease" value="2">
+
+                <label for="tempDecrease">Temp Decrease (&deg;F):</label>
+                <input type="number" id="tempDecrease" value="2">
+
+                <label for="humidityIncrease">Humidity Increase (%RH):</label>
+                <input type="number" id="humidityIncrease" value="5">
+
+                <label for="humidityDecrease">Humidity Decrease (%RH):</label>
+                <input type="number" id="humidityDecrease" value="5">
+            </div>
+        </div>
+
+        <form id="downlinkForm" onsubmit="sendDownlink(event)">
+            <button type="submit">Send Downlink</button>
+        </form>
+    </div>
+</section>
+
+<script src="NetworkDashboard-0.1/static/js/downlinks.js"></script>
+</body>
+</html>
+
+

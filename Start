@@ -1,0 +1,229 @@
+#!/bin/bash
+#
+# Start
+#
+# Script used by the app-manager program to start and stop applications. 
+#
+# This script is a fully cusomizable template that can be used to 
+# initialize the environment for executing the application and starting 
+# all processes. This script is part of the required mPower custom 
+# application framework to start and stop an application.
+#
+# app-manager requires this script to accept the following command line
+# arguments:
+#
+#   start - start the application process(es)
+#   stop  - stop the application process(es)
+#   restart - restart the application process(es)
+#   reload - reload the application configuration (new config downloaded)
+#
+#  Script is invoked with the 'start' option on boot and when the 
+#  `app-manager` 'start' command is run. Script is invoked with the 
+#  'stop' option on shutdown and when the `app-manager` 'stop' command
+#  is run.
+#
+# MultiTech Provided Environment Variables:
+#    APP_DIR - installation directory of the application.
+#    CONFIG_DIR - Directory containing the configuration file.
+#
+# Debugging Tips:
+#  - The `Start` file can be invoked manually from the command line using 
+#  the following:
+#
+#   `$ sudo APP_DIR=$(pwd) CONFIG_DIR=$(pwd)/config ./Start start`
+#
+#  - Enable verbose output during bash processing of the `Start` script 
+#  using:
+#
+#   `set -x`
+#
+#  - Log output from `Start` script to `/var/log/messages` by using the 
+#  `logger` command.
+#
+#   Logger Example:
+#    Line in Script:
+#     `logger "[${NAME}] DAEMON = ${DAEMON}"`
+#
+#    As appears in `/var/log/messages`:
+#     `-09T09:31:35.765713-05:00 mtcap3 root: [Example] DAEMON = /var/config/app/Example/example.exe`
+#
+#  - Write application to log to debug file on file system. 
+#     See commented 'DAEMON_DEBUG_ARGS' variable below for suggestion.
+#
+
+
+################################
+# Shell
+################################
+
+#
+# DEBUG: uncomment to enable verbose output during shell processing of 
+# the `Start` script.
+#
+#set -x
+
+
+################################
+# Variables - Edit to suit.
+################################
+
+#
+#Name
+# Application name.
+#
+NAME="RadioBridgeTools"
+
+#
+#DAEMON
+# Fully qualified path to application executable.
+#
+# Examples:
+#  Python3 - execute interpreter directly:
+#   DAEMON="python3 ${APP_DIR}/example.py"
+#
+#  Compiled Executable (C, C++, etc):
+#   DAEMON="${APP_DIR}/example"
+#
+DAEMON="python3 \"${APP_DIR}/server.py\""
+
+#
+#DAEMON_DEBUG_ARGS
+#
+# Uncomment to pass optional arguments to daemon when debugging.
+#
+DAEMON_DEBUG_ARGS="--logfile \"${APP_DIR}/debug_log.txt\""
+
+#
+#DAEMON_ARGS
+# Arguments supplied to the daemon.
+#
+DAEMON_ARGS="--cfgfile \"${CONFIG_DIR}/radioBridgeTools.cfg.json\" ${DAEMON_DEBUG_ARGS}"
+
+
+################################
+# Variables - Edit if necessary.
+################################
+
+#START_STOP_DAEMON
+# mPower software responsible for starting/stopping the application.
+#
+START_STOP_DAEMON="/usr/sbin/start-stop-daemon"
+
+#PID_FILE
+# File is created while application is running. Contains application PID.
+PID_FILE="/var/run/$NAME.pid"
+
+#RUN_DIR
+# Application will run in this directory.
+#
+RUN_DIR="${APP_DIR}"
+
+
+################################
+# Functions
+################################
+
+# Set custom environment variables for the application execution environment.
+function SetEnv {
+    echo "SetEnv"
+}
+
+# This function can be used to chmod files and implement any security initialization
+function CreateAccess {
+    echo "CreateAccess:"
+}
+
+# Intended to be a hook allowing the application to be executed as a non-root user. 
+function ChangeUser {
+    echo "ChangeUser:"
+}
+
+# The nuts and bolts of starting the application process.
+function ExecuteStart {
+    echo "ExecuteStart:"
+    echo "APP_DIR: ${APP_DIR}"
+    echo "CONFIG_DIR: ${CONFIG_DIR}"
+    echo "RUN_DIR: ${RUN_DIR}"
+    echo "DAEMON: ${DAEMON}"
+    echo "DAEMON_ARGS: ${DAEMON_ARGS}"
+    logger -t Start "APP_DIR: ${APP_DIR}"
+    logger -t Start "CONFIG_DIR: ${CONFIG_DIR}"
+    logger -t Start "Starting: ${DAEMON} ${DAEMON_ARGS}"
+
+    # Construct the command - ensure paths with spaces are properly handled
+    # Use single quotes in the bash -c command to preserve the paths
+    FULL_CMD="python3 '${APP_DIR}/server.py' --cfgfile '${CONFIG_DIR}/radioBridgeTools.cfg.json' --logfile '${APP_DIR}/debug_log.txt'"
+    echo "Full command: $FULL_CMD"
+    logger -t Start "Full command: $FULL_CMD"
+    
+    $START_STOP_DAEMON --start \
+                       --background \
+                       --make-pidfile \
+                       --pidfile "${PID_FILE}" \
+                       --chdir "${RUN_DIR}" \
+                       --startas "/bin/bash" \
+                       -- -c "exec $FULL_CMD"
+}
+
+# Start the application running process(es)
+function Start {
+    SetEnv
+    CreateAccess
+    ChangeUser
+    ExecuteStart
+}
+
+# Stop the application running process(es)
+function Stop {
+    echo "Stop:"
+    $START_STOP_DAEMON --stop -p "${PID_FILE}" --retry 60
+}
+
+# Effectively stop and start the application again.
+function Restart {
+    echo "Restart:"	
+    Stop
+    sleep 1
+    Start
+}
+
+# Notify the application process that new config files are available
+function Reload {
+    echo "Reload:"
+    # Restart not needed for this app
+}
+
+#Gather options from command line
+# Reset in case getopts has been used previously in the shell.
+OPTIND=1
+
+case "$1" in
+    # start is invoked by app-manager after install, on boot, and
+    # during config install
+    start)
+        echo -n "Starting $NAME: "
+        Start
+        ;;
+    # stop is invoked by app-manager before shutdown, and during config install
+    stop)
+        echo -n "Stopping $NAME: "
+        Stop
+        ;;
+    # restart is invoked by app-manager when the app is explicitly restarted
+    restart)
+        echo -n "Restarting $NAME: "
+        Restart
+        ;;
+    # reload is invoked by app-manager after a new config has been installed
+    reload)
+        echo -n "Restarting $NAME: "
+        Reload
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|reload}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
+

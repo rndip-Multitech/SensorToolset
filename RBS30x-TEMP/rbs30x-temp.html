@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadioBridge Temperature Sensor Configuration</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=20">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="../MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>RadioBridge Temperature Sensor Configuration</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="../NetworkDashboard-0.1/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="../index.html">Home</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2024 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <!-- Each image sized independently -->
+            <div style="margin-bottom: 20px;">
+                <img src="rbs301-temp-int.png?v=1"  alt="INT" class="sensor-int" style="max-width: 150px; margin-right: 10px;">
+                <img src="rbs301-temp-ext.png?v=1"  alt="EXT301" class="sensor-ext301" style="max-width: 150px; margin-right: 10px;">
+                <img src="rbs306-temp-ext.png?v=1"  alt="EXT306" class="sensor-ext306" style="max-width: 150px;">
+            </div>
+
+
+    <!-- =========================== -->
+    <!-- GENERAL SECTION             -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <!-- Sensor Type -->
+        <h3 class="section-title">Sensor Type</h3>
+        <select id="sensor-type" class="input-wide">
+            <option value="RBS3010NA19BN00">RBS3010NA19BN00</option>
+            <option value="RBS301-TEMP-INT">RBS301-TEMP-INT</option>
+
+            <!-- EXT models (hex prefix = 09) -->
+            <option value="RBS306-TEMP-EXT">RBS-306-TEMP-EXT</option>
+            <option value="RBS301-TEMP-EXT">RBS301-TEMP-EXT</option>
+            <option value="RBS3010NA05BN00">RBS3010NA05BN00</option>
+        </select>
+
+        <!-- Periodic Reporting -->
+        <h3 class="section-title">Periodic Reporting</h3>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label" for="periodic-reporting">Time Scale:</label>
+                <select id="periodic-reporting" class="input-medium">
+                    <option value="disabled">Disabled</option>
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                </select>
+            </div>
+
+            <div class="column">
+                <label class="inline-label" id="time-period-label" for="time-period">Time Period:</label>
+                <select id="time-period" class="input-small"></select>
+            </div>
+
+            <button id="about-periodic-button" class="help-button">?</button>
+        </div>
+
+        <!-- Reporting Mode -->
+        <h3 class="section-title">Reporting Mode</h3>
+
+        <div class="row">
+            <select id="mode-select" class="input-medium">
+                <option value="">-- Select --</option>
+                <option value="roc">Report on Change</option>
+                <option value="threshold">Threshold</option>
+            </select>
+
+            <button id="about-mode-button" class="help-button">?</button>
+        </div>
+
+    </section>
+
+
+
+    <!-- =========================== -->
+    <!-- ROC SECTION                 -->
+    <!-- =========================== -->
+    <section id="roc-section" class="section" style="display:none;">
+
+        <div class="row">
+            <label for="roc-sensitivity" class="inline-label">Temperature Increase:</label>
+            <input type="number" id="roc-sensitivity" min="1" max="15" class="input-small"> °C
+        </div>
+
+        <div class="row">
+            <label for="roc-interval" class="inline-label">Temperature Decrease:</label>
+            <input type="number" id="roc-interval" min="1" max="15" class="input-small"> °C
+        </div>
+
+    </section>
+
+
+
+    <!-- =========================== -->
+    <!-- THRESHOLD SECTION           -->
+    <!-- =========================== -->
+    <section id="threshold-section" class="section" style="display:none;">
+
+        <div class="row">
+            <label for="threshold-lower" class="inline-label lower-label">Lower Threshold (°C):</label>
+            <input type="number" id="threshold-lower" class="input-small">
+        </div>
+
+        <div class="row">
+            <label for="threshold-upper" class="inline-label upper-label">Upper Threshold (°C):</label>
+            <input type="number" id="threshold-upper" class="input-small">
+        </div>
+
+        <div class="row">
+            <label for="restoral-margin" class="inline-label">Restoral Margin (°C):</label>
+            <input type="number" id="restoral-margin" min="0" max="15" class="input-small">
+        </div>
+
+    </section>
+
+
+
+    <!-- =========================== -->
+    <!-- GENERATED HEX SECTION       -->
+    <!-- =========================== -->
+    <section id="hex-section" class="section" style="display:none;">
+        <div class="row">
+            <h3 class="inline-title">Generated Hexcode:</h3>
+            <span id="hex-output" class="hex-display"></span>
+        </div>
+
+        <button id="copy-button" class="action-button">Copy Hexcode</button>
+        <button id="how-button" class="action-button">How to Use Hexcode</button>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATE BUTTON             -->
+    <!-- =========================== -->
+    <button id="generate-button" class="generate-button">Generate Hexcode</button>
+
+
+        </div>
+    </section>
+
+    <script src="js/script.js?v=20"></script>
+</body>
+</html>

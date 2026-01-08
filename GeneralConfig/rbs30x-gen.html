@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadioBridge General Configuration Settings</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="styles.css?v=2">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="../MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>RadioBridge General Configuration</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="../NetworkDashboard-0.1/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="../index.html">Home</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2024 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <p class="subtitle">Use these settings to configure any RadioBridge Sensor's general configuration parameters.</p>
+
+
+    <!-- =========================== -->
+    <!-- EVENT SETTINGS SECTION      -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Event Settings</h3>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="disableAllEvents">
+                    Disable All Events
+                </label>
+            </div>
+            <button id="about-disable-events" class="help-button">?</button>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="enableADR">
+                    Enable Adaptive Data Rate
+                </label>
+            </div>
+            <button id="about-adr" class="help-button">?</button>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- CONFIRMED MESSAGE SECTION   -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Confirmed Message Settings</h3>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="useConfirmedMessages" checked>
+                    Use Confirmed Messages
+                </label>
+            </div>
+            <button id="about-confirmed" class="help-button">?</button>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label for="numRetries" class="inline-label">Number of Retries:</label>
+                <select id="numRetries" class="input-medium">
+                    <option value="unchanged">Leave Unchanged</option>
+                    <option value="1">1 Retry</option>
+                    <option value="2">2 Retries</option>
+                    <option value="3">3 Retries</option>
+                    <option value="4">4 Retries</option>
+                    <option value="5">5 Retries</option>
+                    <option value="6">6 Retries</option>
+                    <option value="7">7 Retries</option>
+                </select>
+            </div>
+            <button id="about-retries" class="help-button">?</button>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- SUPERVISORY SECTION         -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Supervisory Message Settings</h3>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="enableSupervisoryMessages">
+                    Enable Supervisory Messages
+                </label>
+            </div>
+            <button id="about-supervisory" class="help-button">?</button>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">Interval Time Type:</label>
+            </div>
+            <div class="column">
+                <label class="inline-label">
+                    <input type="radio" name="timeType" value="minutes" checked> Minutes
+                </label>
+            </div>
+            <div class="column">
+                <label class="inline-label">
+                    <input type="radio" name="timeType" value="hours"> Hours
+                </label>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label for="timeInterval" class="inline-label">Time Interval:</label>
+                <select id="timeInterval" class="input-small"></select>
+            </div>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- SAMPLING PERIOD SECTION     -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Sampling Period</h3>
+
+        <div class="row">
+            <div class="column">
+                <label for="samplingPeriod" class="inline-label">Sampling Period:</label>
+                <select id="samplingPeriod" class="input-medium">
+                    <option value="unchanged">Leave Unchanged</option>
+                    <option value="milliseconds">In Milliseconds</option>
+                    <option value="seconds">In Seconds</option>
+                    <option value="minutes">In Minutes</option>
+                    <option value="hours">In Hours</option>
+                </select>
+            </div>
+            <button id="about-sampling" class="help-button">?</button>
+        </div>
+
+        <div class="row" id="timePeriodRow" style="display:none;">
+            <div class="column">
+                <label for="timePeriod" class="inline-label">Time Period:</label>
+                <select id="timePeriod" class="input-small"></select>
+            </div>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATED HEX SECTION       -->
+    <!-- =========================== -->
+    <section id="hex-section" class="section" style="display:none;">
+        <div class="row">
+            <h3 class="inline-title">Generated Hexcode:</h3>
+            <span id="hex-output" class="hex-display"></span>
+        </div>
+
+        <button id="copy-button" class="action-button">Copy Hexcode</button>
+        <button id="how-button" class="action-button">How to Use Hexcode</button>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATE BUTTON             -->
+    <!-- =========================== -->
+    <button id="generate-button" class="generate-button">
+        Generate Hexcode
+    </button>
+
+
+        </div>
+    </section>
+
+    <script src="script.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RBS Water Leak Rope and Probe Configuration</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=3">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="../MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>RBS Water Leak Rope and Probe Configuration</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="../NetworkDashboard-0.1/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="../index.html">Home</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2024 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <div style="margin-bottom: 20px;">
+                <img src="rbs301-wat.png"  alt="RBS301-WAT"  class="sensor-wat" style="max-width: 150px; margin-right: 10px;">
+                <img src="rbs301-wr1m.png" alt="RBS301-WR1M" class="sensor-wr1m" style="max-width: 150px; margin-right: 10px;">
+                <img src="rbs306-wr1m.png" alt="RBS306-WR1M" class="sensor-306-wrm" style="max-width: 150px;">
+            </div>
+
+
+    <!-- =========================== -->
+    <!-- SENSOR TYPE SECTION         -->
+    <!-- =========================== -->
+    <section class="section">
+        <h3 class="section-title">Sensor Type</h3>
+
+        <select id="sensor-type" class="input-wide">
+            <option value="RBS301-WAT">RBS301-WAT</option>
+            <option value="RBS301-WR1M">RBS301-WR1M</option>
+            <option value="RBS301-WR5M">RBS301-WR5M</option>
+            <option value="RBS301-WR10M">RBS301-WR10M</option>
+            <option value="RBS306-WR1M">RBS306-WR1M</option>
+        </select>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- WATER NOTIFICATION SETTINGS -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Water Notification Settings</h3>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="water-present" checked>
+                    Enable Water Present Notification
+                </label>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="water-not-present" checked>
+                    Enable Water Not Present Notification
+                </label>
+            </div>
+
+            <button id="water-help-button" class="help-button">?</button>
+        </div>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- THRESHOLD & RESTORAL        -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Threshold Settings</h3>
+
+        <!-- Threshold -->
+        <div class="row">
+            <div class="column">
+                <label for="threshold" class="inline-label">
+                    Threshold (relative resistance 0–255):
+                </label>
+                <select id="threshold" class="input-medium"></select>
+            </div>
+
+            <button id="threshold-help-button" class="help-button">?</button>
+        </div>
+
+        <!-- Restoral -->
+        <div class="row">
+            <div class="column">
+                <label for="restoral-margin" class="inline-label">
+                    Restoral Margin (relative resistance 0–255):
+                </label>
+                <select id="restoral-margin" class="input-medium"></select>
+            </div>
+
+            <button id="restoral-help-button" class="help-button">?</button>
+        </div>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATED HEX SECTION       -->
+    <!-- =========================== -->
+    <section id="hex-section" class="section" style="display:none;">
+        <div class="row">
+            <h3 class="inline-title">Generated Hexcode:</h3>
+            <span id="hex-output" class="hex-display"></span>
+        </div>
+
+        <button id="copy-button" class="action-button">Copy Hexcode</button>
+        <button id="how-button" class="action-button">How to Use Hexcode</button>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATE BUTTON             -->
+    <!-- =========================== -->
+    <button id="generate-button" class="generate-button">
+        Generate Hexcode
+    </button>
+
+
+        </div>
+    </section>
+
+    <script src="js/script.js?v=3"></script>
+</body>
+</html>

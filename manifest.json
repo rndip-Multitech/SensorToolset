@@ -1,0 +1,8 @@
+{
+  "AppName": "RadioBridge Tools",
+  "AppVersion": "1.1.0",
+  "AppDescription": "RadioBridge Sensor Configuration Tool - Generate hexcodes for configuring RadioBridge sensors and schedule downlinks directly via MQTT",
+  "AppVersionNotes": "Added MQTT integration for direct downlink scheduling to gateway LoRa Network Server",
+  "PersistentStorage": true
+}
+

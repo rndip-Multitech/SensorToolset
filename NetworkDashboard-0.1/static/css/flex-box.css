@@ -1,0 +1,316 @@
+@font-face {
+    font-family: 'PoppinsFont';
+    src: url('../fonts/Poppins-Light.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
+
+
+*{
+    margin: 0px;
+    padding: 0px;
+    box-sizing: border-box;
+}
+
+ul{
+    list-style: none;   
+}
+
+a{
+    text-decoration: none;
+    /* color: white; */
+    /* margin-right: 15px; */
+    /* margin-left: 5px; */
+}
+
+body{
+    font-family: 'PoppinsFont';
+    font-size:13px;
+    line-height: 1.6em;
+
+    display: grid;
+    grid-template-areas:
+    'header header'
+    'nav section'
+    ;
+    grid-template-columns: 200px 6fr;
+    grid-template-rows: 90px 1fr;
+
+}
+header{
+    grid-area: header;
+}
+
+nav{
+    grid-area: nav;
+}
+
+section{
+    grid-area: section;
+    margin: 20px;
+}
+header{
+    /* background-color: steelblue; */
+    background-color: #f5f5f5;
+    height: 90px;
+    padding: 0px 20px;
+}
+
+header .container {
+    display: flex;
+    justify-content: space-between;
+    height: 100%;
+}
+/* BT - Header - Logo */
+.container .my-logo{
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+.container .my-logo h1{
+    margin-left: 10px;
+    /* color: white; */
+}
+/* BT - Header - Nav */
+
+.container .my-nav ul{
+    display: flex;
+    align-items: center;
+    height: 100%;
+    list-style-type: none;  /* Remove bullet points */
+    padding: 0;
+}
+
+.my-nav .item{
+    margin-right: 0px;
+}
+
+.my-nav image{
+    margin-right:0px;
+}
+/* BT - Left navbar */
+
+
+
+.nav-leftside .item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    margin: 5px 0;
+    background-color: #f5f5f5;  /* Default background */
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.nav-leftside .item img {
+    margin-right: 0px;  /*Spacing between icon and text */
+    transition: filter 0.3s;
+}
+
+/* Hover effect: Change background and text color */
+.nav-leftside .item:hover {
+    background-color: #e0e0e0;  /* Change to a darker background on hover */
+    color: #333;  /* Change text color */
+}
+
+/* If you want the SVG icons to darken on hover too */
+.nav-leftside .item:hover img {
+    filter: brightness(0.5);  /* Make icons darker */
+}
+
+.nav-leftside .item a {
+    text-decoration: none;
+    color: inherit;  /* Make text inherit the hover color */
+
+}
+
+.nav-profile{
+    text-align: center;
+    font-size: 11px;
+}
+
+/* BT - Intership stuff */
+h1, h3, a, ul, li, label, p {
+    color: #00394d;
+}
+
+a {
+    text-decoration: none;
+    margin: 1em;
+}
+
+form {
+    color: #ffffff;
+    margin: 2em 0;
+}
+
+.form-section {
+    margin-bottom: 1.5em;
+}
+
+form.inline {
+    display: inline;
+}
+
+input[type="text"], input[type="password"], input[type="number"], input[type="datetime-local"] {
+    width: 80%;
+    padding: .1em;
+    margin: 1em 0em;
+    border-radius: 1em;
+    border: 1px solid #ddd;
+    color: black;
+}
+
+.filter-dropdown {
+    width: 200px;
+    display: inline-block;
+}
+
+ul {
+    list-style-type: disc;
+    padding: 1em;
+}
+
+li {
+    /* margin: 1em 0em; */
+    margin: 5px;
+}
+
+button, a.button {
+    /* display: inline-block; */
+    display: flex;
+    justify-content: center;
+    /* align-items: center; */
+    width: 120px;
+    margin: 5px 0px;
+    /* background-color: white; */
+    background-color: #f5f5f5;
+    /* color: #0072ce; */
+    text-align: center;
+    cursor: pointer;
+    padding: 1em 2em;
+    border: none;
+    font-family: 'PoppinsFont';
+    /* box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); */
+    /* border-radius: 1em; */
+    transition: 0.3s;
+    text-decoration: none;
+    font-size: 1em;
+    transition-duration: 0.4s;
+}
+
+button:hover, a.button:hover {
+    background-color: #e0e0e0;
+}
+
+.help-button {
+    /* background-color: #007BFF; */
+    background-color: #003366;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+    line-height: 15px;
+    text-align: center;
+    cursor: pointer;
+    margin-left: 5px;
+    margin-right: 10px;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    width: 45vw;
+    /* padding: 1em; */
+    text-align: center;
+    font-size: 1vw;
+    color: #333;
+    transition: 0.3s;
+    /* box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); */
+}
+
+th, tr, td {
+    background-color: #ffffff;
+    /* padding: 1em 1em; */
+    border: 1px solid #e0e0e0;
+    /* box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); */
+    text-decoration: none;
+    font-size: 1em;
+    color: #333;
+    text-align: center;
+}
+
+.form-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1em;
+}
+
+.form-group label {
+    margin-right: 1em;
+}
+
+.form-group input {
+    flex: 1;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgb(0, 0, 0);
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    color: black;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.modal_p {
+    color: #000000;
+}
+
+#pongCanvas {
+    display: block;
+    margin: 0 auto;
+    border: 1px solid #fff;
+}
+
+.icon-margin {
+    margin-right: 8px; /* Adjust the value to your preference */
+  }
+
+
+

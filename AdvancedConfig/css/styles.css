@@ -1,0 +1,130 @@
+/* =========================== */
+/* Global Compact Styling      */
+/* =========================== */
+
+body {
+    font-family: Gotham, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.25;
+    margin: 10px;
+    color: #000;
+}
+
+/* =========================== */
+/* Header Area                 */
+/* =========================== */
+
+header {
+    text-align: left;
+    margin-bottom: 10px;
+}
+
+.logo {
+    width: 170px;
+    height: auto;
+}
+
+.title {
+    font-size: 18px;
+    margin: 4px 0;
+}
+
+/* =========================== */
+/* Section Titles              */
+/* =========================== */
+
+.section-title {
+    font-size: 15px;
+    font-weight: bold;
+    margin: 10px 0 4px 0;
+}
+
+/* =========================== */
+/* Section Layout              */
+/* =========================== */
+
+.section {
+    margin-bottom: 28px;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 6px;
+}
+
+.column {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+.inline-label {
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+/* =========================== */
+/* Form Controls               */
+/* =========================== */
+
+select,
+input[type="number"] {
+    font-size: 14px;
+}
+
+.input-small {
+    width: 80px;
+    height: 22px;
+}
+
+.input-medium {
+    width: 150px;
+    height: 22px;
+}
+
+/* =========================== */
+/* Buttons                     */
+/* =========================== */
+
+.generate-button {
+    width: 170px;
+    height: 30px;
+    margin-top: 10px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.action-button {
+    margin-top: 5px;
+    margin-right: 5px;
+    padding: 4px 8px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.home-button {
+    width: 100px;
+    height: 30px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+/* =========================== */
+/* Hex Display                 */
+/* =========================== */
+
+.inline-title {
+    margin: 0;
+    font-size: 15px;
+}
+
+.hex-display {
+    font-family: monospace;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+
