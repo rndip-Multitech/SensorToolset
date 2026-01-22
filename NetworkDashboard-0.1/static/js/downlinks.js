@@ -9,6 +9,8 @@
  */
 
 let brokerIp = '';
+let preloadedHexcode = null;
+let preloadedSensorType = null;
 
 
 /**
@@ -19,6 +21,27 @@ let brokerIp = '';
  * @returns {void}
  */
 document.addEventListener('DOMContentLoaded', (event) => {
+    // Check for hexcode and sensorType in URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    preloadedHexcode = urlParams.get('hexcode');
+    preloadedSensorType = urlParams.get('sensorType');
+    
+    // If hexcode is provided, auto-connect and show simplified interface
+    if (preloadedHexcode) {
+        // Auto-connect to broker
+        const broker = document.getElementById('broker').value || 'localhost';
+        const port = document.getElementById('port').value || '1883';
+        const topic = document.getElementById('topic').value || 'lora/+/up';
+        
+        // Connect automatically
+        connectToBrokerAuto(broker, port, topic);
+        
+        // Show a message that hexcode is ready
+        setTimeout(() => {
+            alert('Hexcode loaded! Please select a sensor and click "Send Downlink" to schedule.');
+        }, 1000);
+    }
+    
     const sensorSelectElement = document.getElementById('sensorSelect');
     const modeElement = document.getElementById('mode');
     const thresholdModeConfig = document.getElementById('thresholdModeConfig');
@@ -96,7 +119,9 @@ document.addEventListener('DOMContentLoaded', (event) => {
  * @returns {void}
  */
 function connectToBroker(event) {
-    event.preventDefault();
+    if (event) {
+        event.preventDefault();
+    }
     const broker = document.getElementById('broker').value;
     const port = document.getElementById('port').value;
     const topic = document.getElementById('topic').value;
@@ -111,14 +136,42 @@ function connectToBroker(event) {
         .then(response => response.json())
         .then(data => {
             if (data.message) {
-                alert(data.message);
+                if (event) {
+                    alert(data.message);
+                }
                 brokerIp = broker; // Store broker IP for downlink usage
             } else {
-                alert('Failed to connect to the broker');
+                if (event) {
+                    alert('Failed to connect to the broker');
+                }
             }
         })
         .catch(error => {
-            alert('Error: ' + error);
+            if (event) {
+                alert('Error: ' + error);
+            }
+        });
+}
+
+/**
+ * Auto-connect to broker without showing alerts (for preloaded hexcode)
+ */
+function connectToBrokerAuto(broker, port, topic) {
+    fetch('/connect', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({broker, port, topic})
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                brokerIp = broker; // Store broker IP for downlink usage
+            }
+        })
+        .catch(error => {
+            console.error('Auto-connect error:', error);
         });
 }
 
@@ -132,6 +185,56 @@ function connectToBroker(event) {
 function sendDownlink(event) {
     event.preventDefault();
     const sensorSelectElement = document.getElementById('sensorSelect');
+    
+    // If we have a preloaded hexcode, send it directly
+    if (preloadedHexcode) {
+        const devEui = sensorSelectElement ? sensorSelectElement.value.replace(/-/g, '') : ''; // Remove dashes from DevEUI
+        if (!devEui) {
+            alert('Please select a sensor first.');
+            return;
+        }
+        const topic = `lora/${devEui}/down`;
+        
+        // Convert hexcode to base64
+        const hexString = preloadedHexcode;
+        const bytes = [];
+        for (let i = 0; i < hexString.length; i += 2) {
+            bytes.push(parseInt(hexString.substr(i, 2), 16));
+        }
+        const base64Data = btoa(String.fromCharCode(...bytes));
+        
+        const downlinkData = {
+            topic: topic,
+            hexcode: base64Data,
+            broker: brokerIp || 'localhost'
+        };
+        
+        fetch('/send_downlink', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(downlinkData)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    alert('Downlink sent: ' + data.message);
+                    // Clear the URL parameters
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    preloadedHexcode = null;
+                } else {
+                    alert('Error sending downlink: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error sending downlink: ' + error);
+            });
+        return;
+    }
+    
+    // Original logic for building downlink from form
     const sensorType = sensorSelectElement ? sensorSelectElement.options[sensorSelectElement.selectedIndex].text.split(' ')[1].toLowerCase() : null;
     const devEui = sensorSelectElement ? sensorSelectElement.value.replace(/-/g, '') : ''; // Remove dashes from DevEUI
     const topic = `lora/${devEui}/down`; // Construct the topic

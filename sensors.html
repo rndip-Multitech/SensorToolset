@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Monitoring</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .sensor-card {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .sensor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #00394d;
+        }
+        .sensor-header h3 {
+            margin: 0;
+            color: #00394d;
+        }
+        .sensor-info {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            font-weight: bold;
+        }
+        .info-value {
+            font-size: 18px;
+            color: #00394d;
+            font-weight: bold;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            margin: 4px;
+        }
+        .status-on {
+            background-color: #4caf50;
+            color: white;
+        }
+        .status-off {
+            background-color: #f44336;
+            color: white;
+        }
+        .status-open {
+            background-color: #ff9800;
+            color: white;
+        }
+        .status-closed {
+            background-color: #2196f3;
+            color: white;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 15px 0;
+        }
+        .chart-container.small {
+            height: 200px;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-style: italic;
+        }
+        .sensor-selector {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+        }
+        .sensor-selector select {
+            width: 100%;
+            max-width: 400px;
+            padding: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>Sensor Monitoring</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="index.html">Home</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
+                    <a href="uplinks.html">Uplinks</a>
+                </li>
+                <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M3 3v18h18"></path>
+                        <path d="M7 16l4-4 4 4 6-6"></path>
+                    </svg>
+                    <a href="sensors.html">Sensors</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
+                    <a href="downlinks.html">RadioBridge Downlinks</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/send.svg" width="24" height="24" class="icon-margin" alt="Tools">
+                    <a href="tools_downlinks.html">Downlink Tools</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
+                    <a href="decoders.html">Decoders</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
+                    <a href="radiobridge.html">RadioBridge Config</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2024 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <h2 class="section-title">Sensor Data Visualization</h2>
+            <p style="margin-top: 8px; color: #666;">
+                View real-time charts and status indicators for sensors on your network. Data is extracted from cached uplink messages.
+            </p>
+
+            <div class="sensor-selector">
+                <label for="sensorSelect" style="font-weight: bold; margin-right: 10px;">Select Sensor:</label>
+                <select id="sensorSelect">
+                    <option value="">-- Loading sensors --</option>
+                </select>
+                <button type="button" class="action-button" id="refreshBtn" style="margin-left: 10px;">Refresh</button>
+            </div>
+
+            <div id="sensorContent">
+                <div class="no-data">Select a sensor to view its data</div>
+            </div>
+        </div>
+    </section>
+
+    <script src="NetworkDashboard-0.1/static/js/decoders/decoder_registry.js"></script>
+    <script src="NetworkDashboard-0.1/static/js/decoders/server_decoded.js"></script>
+    <script src="NetworkDashboard-0.1/static/js/decoders/radiobridge.js"></script>
+    <script src="NetworkDashboard-0.1/static/js/decoders/sensative_strips.js"></script>
+    <script src="NetworkDashboard-0.1/static/js/decoders/raw.js"></script>
+    <script>
+        // IndexedDB setup (reuse from uplinks.html)
+        let db = null;
+        const DB_NAME = 'RBTUplinksDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'messages';
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                request.onupgradeneeded = (event) => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains(STORE_NAME)) {
+                        const objectStore = database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+                        objectStore.createIndex('deveui', 'deveui', { unique: false });
+                        objectStore.createIndex('time', 'time', { unique: false });
+                        objectStore.createIndex('eventType', 'eventType', { unique: false });
+                    }
+                };
+            });
+        }
+
+        // Get all cached messages for a specific DevEUI
+        async function getSensorMessages(deveui) {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const index = store.index('deveui');
+                const request = index.openCursor(IDBKeyRange.only(deveui));
+                const messages = [];
+
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        messages.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        // Sort by time (newest first)
+                        messages.sort((a, b) => new Date(b.time) - new Date(a.time));
+                        resolve(messages);
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // Get list of unique sensors from cache
+        async function getSensorList() {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const index = store.index('deveui');
+                const request = index.openCursor();
+                const sensors = new Set();
+
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        if (cursor.value.deveui) {
+                            sensors.add(cursor.value.deveui);
+                        }
+                        cursor.continue();
+                    } else {
+                        resolve(Array.from(sensors).sort());
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // Extract numeric values from decoded message
+        function extractNumericValues(decoded, prefix = '') {
+            const values = {};
+            if (!decoded || typeof decoded !== 'object') return values;
+
+            // Common field names to look for
+            const numericFields = ['temperature', 'temp', 'humidity', 'hum', 'battery', 'voltage', 
+                                   'rssi', 'snr', 'angle', 'distance', 'level', 'pressure', 
+                                   'lux', 'light', 'current', 'voltage', 'value', 'measurement',
+                                   'celsius', 'fahrenheit', 'count', 'sequence'];
+
+            for (const key in decoded) {
+                const val = decoded[key];
+                const fullKey = prefix ? `${prefix}_${key}` : key;
+                const keyLower = key.toLowerCase();
+
+                if (typeof val === 'number') {
+                    values[fullKey] = val;
+                } else if (typeof val === 'object' && val !== null) {
+                    // Recursively extract from nested objects
+                    if (val.value !== undefined && typeof val.value === 'number') {
+                        values[fullKey] = val.value;
+                    } else if (val.temp !== undefined && typeof val.temp === 'number') {
+                        values[fullKey + '_temp'] = val.temp;
+                    } else if (val.humidity !== undefined && typeof val.humidity === 'number') {
+                        values[fullKey + '_humidity'] = val.humidity;
+                    } else {
+                        Object.assign(values, extractNumericValues(val, fullKey));
+                    }
+                } else if (typeof val === 'string') {
+                    // Try to parse numeric strings, especially for common fields
+                    const num = parseFloat(val);
+                    if (!isNaN(num) && isFinite(num)) {
+                        values[fullKey] = num;
+                    } else if (numericFields.some(f => keyLower.includes(f))) {
+                        // Try extracting number from string like "25.5 °C" or "25.5C"
+                        const match = val.match(/-?\d+\.?\d*/);
+                        if (match) {
+                            const extracted = parseFloat(match[0]);
+                            if (!isNaN(extracted)) {
+                                values[fullKey] = extracted;
+                            }
+                        }
+                    }
+                }
+            }
+            return values;
+        }
+
+        // Extract binary/status values
+        function extractBinaryValues(decoded, prefix = '') {
+            const values = {};
+            if (!decoded || typeof decoded !== 'object') return values;
+
+            for (const key in decoded) {
+                const val = decoded[key];
+                const fullKey = prefix ? `${prefix}_${key}` : key;
+
+                if (typeof val === 'boolean') {
+                    values[fullKey] = val;
+                } else if (typeof val === 'string') {
+                    const lower = val.toLowerCase();
+                    if (lower === 'open' || lower === 'closed' || lower === 'on' || lower === 'off' ||
+                        lower === 'true' || lower === 'false' || lower === 'yes' || lower === 'no' ||
+                        lower.includes('present') || lower.includes('not present') ||
+                        lower.includes('connected') || lower.includes('disconnected')) {
+                        values[fullKey] = val;
+                    }
+                } else if (typeof val === 'object' && val !== null) {
+                    Object.assign(values, extractBinaryValues(val, fullKey));
+                }
+            }
+            return values;
+        }
+
+        // Extract RSSI/SNR from message data
+        function extractSignalData(message) {
+            const signal = {};
+            const data = message.original && message.original.data;
+            if (data && typeof data === 'object') {
+                if (typeof data.rssi === 'number') signal.rssi = data.rssi;
+                if (typeof data.snr === 'number') signal.snr = data.snr;
+                if (typeof data.signal_rssi === 'number') signal.rssi = data.signal_rssi;
+                if (typeof data.signal_snr === 'number') signal.snr = data.signal_snr;
+            }
+            return signal;
+        }
+
+        // Build chart data from messages
+        function buildChartData(messages, fieldName, extractor) {
+            const data = [];
+            const labels = [];
+            const maxPoints = 100; // Limit to last 100 points for performance
+
+            const sorted = messages.slice(0, maxPoints).reverse(); // Oldest first for chart
+            sorted.forEach(msg => {
+                const timestamp = new Date(msg.time);
+                const values = extractor(msg.decoded || {});
+                const value = values[fieldName];
+                
+                if (value !== undefined && value !== null) {
+                    labels.push(timestamp.toLocaleTimeString());
+                    data.push(value);
+                }
+            });
+
+            return { labels, data };
+        }
+
+        // Create a line chart
+        function createLineChart(canvasId, title, fieldName, messages, extractor, unit = '') {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return null;
+
+            const chartData = buildChartData(messages, fieldName, extractor);
+            if (chartData.data.length === 0) return null;
+
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: `${title}${unit ? ` (${unit})` : ''}`,
+                        data: chartData.data,
+                        borderColor: 'rgb(0, 57, 77)',
+                        backgroundColor: 'rgba(0, 57, 77, 0.1)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: title
+                        },
+                        legend: {
+                            display: true
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // Render sensor dashboard
+        async function renderSensorDashboard(deveui) {
+            const messages = await getSensorMessages(deveui);
+            if (messages.length === 0) {
+                document.getElementById('sensorContent').innerHTML = '<div class="no-data">No data available for this sensor</div>';
+                return;
+            }
+
+            // Re-decode messages with current decoder selection
+            const decoderMap = JSON.parse(localStorage.getItem('rbt_decoder_map_by_deveui') || '{}');
+            const defaultDecoderId = localStorage.getItem('rbt_default_decoder_id') || 'auto';
+            const decoderId = decoderMap[deveui] || defaultDecoderId;
+
+            // Collect all numeric and binary values across messages
+            const numericFields = new Set();
+            const binaryFields = new Set();
+            const signalData = [];
+
+            messages.forEach(msg => {
+                // Use cached decoded result, or re-decode if needed
+                let decoded = msg.decoded || {};
+                
+                // If decoded is empty or just has error, try to re-decode
+                if (!decoded || Object.keys(decoded).length === 0 || decoded.error) {
+                    try {
+                        if (window.RBTDecoders) {
+                            let decoder = null;
+                            if (!decoderId || decoderId === 'auto') {
+                                decoder = window.RBTDecoders.pickAutoDecoder(msg.original);
+                            } else {
+                                decoder = window.RBTDecoders.getDecoder(decoderId);
+                            }
+                            if (!decoder) decoder = window.RBTDecoders.getDecoder('raw');
+                            if (decoder) {
+                                const out = decoder.decode(msg.original);
+                                const normalized = window.RBTDecoders.normalizeDecodedOutput(out);
+                                decoded = normalized.decoded || {};
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Decode error:', e);
+                    }
+                }
+
+                const numeric = extractNumericValues(decoded);
+                const binary = extractBinaryValues(decoded);
+                const signal = extractSignalData(msg);
+
+                Object.keys(numeric).forEach(k => numericFields.add(k));
+                Object.keys(binary).forEach(k => binaryFields.add(k));
+                if (signal.rssi !== undefined || signal.snr !== undefined) {
+                    signalData.push({ time: msg.time, ...signal });
+                }
+                
+                // Store decoded result back in msg for chart building
+                msg.decoded = decoded;
+            });
+
+            // Build HTML
+            let html = `<div class="sensor-card">
+                <div class="sensor-header">
+                    <h3>Sensor: ${deveui}</h3>
+                    <span style="color: #666; font-size: 14px;">${messages.length} messages</span>
+                </div>
+                <div class="sensor-info">
+                    <div class="info-item">
+                        <span class="info-label">Last Update</span>
+                        <span class="info-value">${new Date(messages[0].time).toLocaleString()}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Event Type</span>
+                        <span class="info-value">${messages[0].eventType || 'N/A'}</span>
+                    </div>
+                </div>`;
+
+            // Add signal quality charts
+            if (signalData.length > 0) {
+                html += `<h4 style="margin-top: 20px; color: #00394d;">Signal Quality</h4>`;
+                if (signalData.some(s => s.rssi !== undefined)) {
+                    html += `<div class="chart-container small"><canvas id="chart_rssi_${deveui}"></canvas></div>`;
+                }
+                if (signalData.some(s => s.snr !== undefined)) {
+                    html += `<div class="chart-container small"><canvas id="chart_snr_${deveui}"></canvas></div>`;
+                }
+            }
+
+            // Add numeric value charts
+            if (numericFields.size > 0) {
+                html += `<h4 style="margin-top: 20px; color: #00394d;">Numeric Values</h4>`;
+                numericFields.forEach(field => {
+                    const chartId = `chart_${field}_${deveui}`.replace(/[^a-zA-Z0-9_]/g, '_');
+                    html += `<div class="chart-container"><canvas id="${chartId}"></canvas></div>`;
+                });
+            }
+
+            // Add binary status indicators
+            if (binaryFields.size > 0) {
+                html += `<h4 style="margin-top: 20px; color: #00394d;">Status Indicators</h4>`;
+                html += `<div style="display: flex; flex-wrap: wrap; gap: 10px;">`;
+                
+                // Get latest binary values
+                const latestMsg = messages[0];
+                let latestDecoded = {};
+                try {
+                    if (window.RBTDecoders) {
+                        let decoder = null;
+                        if (!decoderId || decoderId === 'auto') {
+                            decoder = window.RBTDecoders.pickAutoDecoder(latestMsg.original);
+                        } else {
+                            decoder = window.RBTDecoders.getDecoder(decoderId);
+                        }
+                        if (!decoder) decoder = window.RBTDecoders.getDecoder('raw');
+                        if (decoder) {
+                            const out = decoder.decode(latestMsg.original);
+                            latestDecoded = window.RBTDecoders.normalizeDecodedOutput(out).decoded || {};
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Decode error:', e);
+                }
+
+                const latestBinary = extractBinaryValues(latestDecoded);
+                binaryFields.forEach(field => {
+                    const value = latestBinary[field];
+                    if (value !== undefined) {
+                        const displayValue = String(value);
+                        let badgeClass = 'status-off';
+                        if (displayValue.toLowerCase().includes('open') || displayValue.toLowerCase() === 'true' || displayValue.toLowerCase() === 'on') {
+                            badgeClass = 'status-open';
+                        } else if (displayValue.toLowerCase().includes('closed') || displayValue.toLowerCase() === 'false' || displayValue.toLowerCase() === 'off') {
+                            badgeClass = 'status-closed';
+                        } else if (displayValue.toLowerCase().includes('present') || displayValue.toLowerCase().includes('connected')) {
+                            badgeClass = 'status-on';
+                        }
+                        html += `<div>
+                            <span class="info-label">${field.replace(/_/g, ' ')}</span>
+                            <span class="status-badge ${badgeClass}">${displayValue}</span>
+                        </div>`;
+                    }
+                });
+                html += `</div>`;
+            }
+
+            html += `</div>`;
+            document.getElementById('sensorContent').innerHTML = html;
+
+            // Create charts after DOM is updated
+            setTimeout(() => {
+                // Signal quality charts
+                if (signalData.length > 0) {
+                    const rssiMessages = signalData
+                        .filter(s => s.rssi !== undefined)
+                        .map(s => ({ time: s.time, decoded: { rssi: s.rssi } }));
+                    if (rssiMessages.length > 0) {
+                        createLineChart(`chart_rssi_${deveui}`, 'RSSI', 'rssi', 
+                            rssiMessages,
+                            (decoded) => ({ rssi: decoded.rssi }), 'dBm');
+                    }
+
+                    const snrMessages = signalData
+                        .filter(s => s.snr !== undefined)
+                        .map(s => ({ time: s.time, decoded: { snr: s.snr } }));
+                    if (snrMessages.length > 0) {
+                        createLineChart(`chart_snr_${deveui}`, 'SNR', 'snr',
+                            snrMessages,
+                            (decoded) => ({ snr: decoded.snr }), 'dB');
+                    }
+                }
+
+                // Numeric value charts - use messages with decoded data
+                numericFields.forEach(field => {
+                    const chartId = `chart_${field}_${deveui}`.replace(/[^a-zA-Z0-9_]/g, '_');
+                    const fieldTitle = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    // Filter messages that have this field
+                    const filteredMessages = messages.filter(msg => {
+                        const numeric = extractNumericValues(msg.decoded || {});
+                        return numeric[field] !== undefined;
+                    });
+                    if (filteredMessages.length > 0) {
+                        createLineChart(chartId, fieldTitle, field, filteredMessages, extractNumericValues);
+                    }
+                });
+            }, 100);
+        }
+
+        // Populate sensor dropdown
+        async function populateSensorList() {
+            const sensors = await getSensorList();
+            const select = document.getElementById('sensorSelect');
+            select.innerHTML = '<option value="">-- Select a sensor --</option>';
+            sensors.forEach(deveui => {
+                const opt = document.createElement('option');
+                opt.value = deveui;
+                opt.textContent = deveui;
+                select.appendChild(opt);
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await initDB();
+                await populateSensorList();
+
+                document.getElementById('sensorSelect').addEventListener('change', function() {
+                    const deveui = this.value;
+                    if (deveui) {
+                        renderSensorDashboard(deveui);
+                    } else {
+                        document.getElementById('sensorContent').innerHTML = '<div class="no-data">Select a sensor to view its data</div>';
+                    }
+                });
+
+                document.getElementById('refreshBtn').addEventListener('click', async () => {
+                    await populateSensorList();
+                });
+            } catch (e) {
+                console.error('Initialization error:', e);
+                document.getElementById('sensorContent').innerHTML = '<div class="no-data" style="color: red;">Error initializing: ' + e + '</div>';
+            }
+        });
+    </script>
+</body>
+</html>

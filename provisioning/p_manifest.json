@@ -1,9 +1,13 @@
-{"pkgs" : [{ "FileName": "python3-xmlrpc_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-xmlrpc"},
-{ "FileName": "python3-pip_22.0.3-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-pip"},
-{ "FileName": "python3-misc_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-misc"},
-{ "FileName": "python3-multiprocessing_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-multiprocessing"},
-{ "FileName": "python3-mmap_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-mmap"},
-{ "FileName": "python3-distutils_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-distutils"}]
-
+{
+  "_comment": "mPower 7 provisioning manifest - cortexa7t2hf-neon architecture",
+  "pkgs" : [
+    { "FileName": "python3-xmlrpc_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-xmlrpc"},
+    { "FileName": "python3-pip_22.0.3-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-pip"},
+    { "FileName": "python3-misc_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-misc"},
+    { "FileName": "python3-multiprocessing_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-multiprocessing"},
+    { "FileName": "python3-mmap_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-mmap"},
+    { "FileName": "python3-distutils_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-distutils"}
+  ]
 }
+
 

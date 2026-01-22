@@ -1,0 +1,8 @@
+{"pkgs" : [
+    { "FileName": "python3-xmlrpc_3.8.13-r0.0_armv7vet2hf-neon.ipk", "type": "ipk", "PkgName": "python3-xmlrpc"},
+    { "FileName": "python3-pip_20.0.2-r0.0_armv7vet2hf-neon.ipk", "type": "ipk", "PkgName": "python3-pip"},
+    { "FileName": "python3-misc_3.8.13-r0.0_armv7vet2hf-neon.ipk", "type": "ipk", "PkgName": "python3-misc"},
+    { "FileName": "python3-multiprocessing_3.8.13-r0.0_armv7vet2hf-neon.ipk", "type": "ipk", "PkgName": "python3-multiprocessing"},
+    { "FileName": "python3-mmap_3.8.13-r0.0_armv7vet2hf-neon.ipk", "type": "ipk", "PkgName": "python3-mmap"}
+    ]
+}

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RadioBridge Configuration Tool</title>
+    <title>Sensor Toolkit</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
         <div class="container">
             <div class="my-logo">
                 <img src="MultiTech_Logo.png" alt="MultiTech Logo">
-                <h1>RadioBridge Sensor Configuration Tool</h1>
+                <h1>Sensor Toolkit</h1>
             </div>
         </div>
     </header>
@@ -23,6 +23,30 @@
                     <img src="NetworkDashboard-0.1/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
                     <a href="index.html">Home</a>
                 </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
+                    <a href="uplinks.html">Uplinks</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/bar-chart.svg" width="24" height="24" class="icon-margin" alt="Sensors">
+                    <a href="sensors.html">Sensors</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
+                    <a href="downlinks.html">RadioBridge Downlinks</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/send.svg" width="24" height="24" class="icon-margin" alt="Tools">
+                    <a href="tools_downlinks.html">Downlink Tools</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
+                    <a href="decoders.html">Decoders</a>
+                </li>
+                <li class="item">
+                    <img src="NetworkDashboard-0.1/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
+                    <a href="radiobridge.html">RadioBridge Config</a>
+                </li>
             </ul>
         </div>
         <div class="nav-profile">
@@ -33,302 +57,34 @@
 
     <section>
         <div class="container">
-            <h2 class="section-title">Please choose a sensor you would like to configure:</h2>
-            <div class="sensor-list">
-                <div class="sensor-item">
-                    <a href="GeneralConfig/rbs30x-gen.html" class="sensor-link">General Sensor Configuration</a>
-                    <button class="help-button" onclick="showGeneralConfigInfo()">?</button>
+            <h2 class="section-title">Welcome</h2>
+            <p style="margin-top: 8px;">
+                This toolkit helps you monitor uplinks, schedule downlinks, and manage payload decoders.
+            </p>
+
+            <div class="sensor-list" style="margin-top: 16px;">
+                <div class="sensor-item" style="background-color: #e3f2fd; border: 2px solid #2196f3;">
+                    <a href="uplinks.html" class="sensor-link" style="font-weight: bold; color: #1976d2;">📥 View Uplinks</a>
+                    <button class="help-button" onclick="alert('Connect to your gateway\\'s LoRa Network Server MQTT broker and decode uplinks using selectable decoders.')">?</button>
                 </div>
                 <div class="sensor-item">
-                    <a href="AdvancedConfig/advanced.html" class="sensor-link">Advanced Sensor Configuration</a>
-                    <button class="help-button" onclick="showAdvancedConfigInfo()">?</button>
+                    <a href="sensors.html" class="sensor-link">📊 Sensor Monitoring</a>
+                    <button class="help-button" onclick="alert('View real-time charts and status indicators for sensors. Graphs show numeric values over time (temperature, RSSI, SNR, etc.) and status badges for binary values.')">?</button>
                 </div>
                 <div class="sensor-item">
-                    <a href="RBS30x-TEMP/rbs30x-temp.html" class="sensor-link">RadioBridge Temperature Sensors</a>
-                    <button onclick="showTempSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/all-products/wireless-sensors/temperature-air-wireless-sensors/', '_blank')">More Info...</button>
+                    <a href="decoders.html" class="sensor-link">🧩 Manage Decoders</a>
+                    <button class="help-button" onclick="alert('Upload or paste JavaScript decoders. Then select them on the Uplinks page (Auto / Default / Per-DevEUI).')">?</button>
                 </div>
                 <div class="sensor-item">
-                    <a href="RBS301-CON/rbs301-con.html" class="sensor-link">RadioBridge Dry Contact Sensor</a>
-                    <button onclick="showDryContactSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/all-products/wireless-sensors/proximity-sensors/', '_blank')">More Info...</button>
+                    <a href="downlinks.html" class="sensor-link">📤 RadioBridge Downlinks</a>
+                    <button class="help-button" onclick="alert('Discover sensors from uplinks and schedule RadioBridge downlinks via MQTT.')">?</button>
                 </div>
                 <div class="sensor-item">
-                    <a href="RBS30x-ABM/rbs30x-abm.html" class="sensor-link">RadioBridge Movement Sensors</a>
-                    <button onclick="showMovementSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/all-products/wireless-sensors/movement-sensors/', '_blank')">More Info...</button>
-                </div>
-                <div class="sensor-item">
-                    <a href="RBS30x-WAT/rbs30x-wat.html" class="sensor-link">RadioBridge Water Leak Sensors</a>
-                    <button onclick="showWaterLeakSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/all-products/wireless-sensors/wireless-liquid-sensors/', '_blank')">More Info...</button>
-                </div>
-                <div class="sensor-item">
-                    <a href="RBS306-ATH/rbs30x-at.html" class="sensor-link">RadioBridge Temperature & Humidity Sensor</a>
-                    <button onclick="showTempHumiditySensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/all-products/wireless-sensors/temperature-air-wireless-sensors/', '_blank')">More Info...</button>
-                </div>
-                <div class="sensor-item">
-                    <a href="RBS306-420MA/rbs306-420ma.html" class="sensor-link">4-20 mA Sensor</a>
-                    <button onclick="show420maSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/product/lorawan-4-20ma-current-loop-sensor-bridge-for-outdoor-industrial-use-north-america/', '_blank')">More Info...</button>
-                </div>
-                <div class="sensor-item">
-                    <a href="RBS301-TILT/rbs301-tilt.html" class="sensor-link">RadioBridge Tilt Sensor</a>
-                    <button onclick="showTiltSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/product/lorawan-wireless-tilt-sensor-low-precision/', '_blank')">More Info...</button>
-                </div>
-                <div class="sensor-item">
-                    <a href="RBS301-DWS/rbs301-dws.html" class="sensor-link">RadioBridge Door-Window Sensor</a>
-                    <button onclick="showDoorWindowSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/all-products/wireless-sensors/proximity-sensors/', '_blank')">More Info...</button>
-                </div>
-                <div class="sensor-item">
-                    <a href="RBS301-PB/rbs301-pb.html" class="sensor-link">RadioBridge Push Button Sensor</a>
-                    <button onclick="showPushButtonSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/all-products/wireless-sensors/push-button-sensors/', '_blank')">More Info...</button>
-                </div>
-                <div class="sensor-item">
-                    <a href="RBS306-ULS/rbs306-uls.html" class="sensor-link">Wireless Ultrasonic Level Sensor</a>
-                    <button onclick="showUltrasonicSensorList()">Sensor List</button>
-                    <button onclick="window.open('https://multitech.com/all-products/wireless-sensors/industrial-sensors/', '_blank')">More Info...</button>
+                    <a href="radiobridge.html" class="sensor-link">⚙️ RadioBridge Configuration</a>
+                    <button class="help-button" onclick="alert('Access RadioBridge configuration pages and generated downlink payloads.')">?</button>
                 </div>
             </div>
         </div>
     </section>
-
-    <!-- Modal Dialog for Temperature Sensor List -->
-    <div id="tempSensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">RadioBridge Temperature Sensor List</div>
-            <div class="modal-content">
-                RBS3010NA19BN00<br>
-                RBS3010EU19BN00<br>
-                RBS3010AU19BN00<br>
-                RBS301-INT-TEMP<br>
-                RBS3010NA05BN00<br>
-                RBS3010EU05BN00<br>
-                RBS3010AU05BN00<br>
-                RBS301-EXT-TEMP
-            </div>
-            <button class="modal-close" onclick="closeTempSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Dry Contact Sensor List -->
-    <div id="dryContactSensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">RadioBridge Dry Contact Sensor List</div>
-            <div class="modal-content">
-                RBS3010NA03BN00<br>
-                RBS3010EU03BN00<br>
-                RBS3010AU03BN00<br>
-                RBS301-CON
-            </div>
-            <button class="modal-close" onclick="closeDryContactSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Movement Sensor List -->
-    <div id="movementSensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">RadioBridge Movement Sensor List</div>
-            <div class="modal-content">
-                RBS3010NA08BN00<br>
-                RBS3010EU08BN00<br>
-                RBS3010AU08BN00<br>
-                RBS306-ATH
-            </div>
-            <button class="modal-close" onclick="closeMovementSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Temperature & Humidity Sensor List -->
-    <div id="tempHumiditySensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">RadioBridge Temperature & Humidity Sensor List</div>
-            <div class="modal-content">
-                RBS3010NA0EBN00<br>
-                RBS3010EU0EBN00<br>
-                RBS3010AU0EBN00<br>
-                RBS306-ATH
-            </div>
-            <button class="modal-close" onclick="closeTempHumiditySensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Water Leak Sensor List -->
-    <div id="waterLeakSensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">RadioBridge Water Leak Sensor List</div>
-            <div class="modal-content">
-                RBS3010xx0ABN00<br>
-                RBS3010NA0ABN00<br>
-                RBS3010EU0ABN00<br>
-                RBS3010AU0ABN00
-            </div>
-            <button class="modal-close" onclick="closeWaterLeakSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for 4-20 mA Sensor List -->
-    <div id="sensor420maModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">4-20 mA Sensor List</div>
-            <div class="modal-content">
-                RBS306-420MA-US
-            </div>
-            <button class="modal-close" onclick="close420maSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Tilt Sensor List -->
-    <div id="tiltSensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">RadioBridge Tilt Sensor List</div>
-            <div class="modal-content">
-                RBS3010NA09BN00<br>
-                RBS3010EU09BN00<br>
-                RBS3010AU09BN00<br>
-                RBS301-TILT
-            </div>
-            <button class="modal-close" onclick="closeTiltSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Door-Window Sensor List -->
-    <div id="doorWindowSensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">RadioBridge Door-Window Sensor List</div>
-            <div class="modal-content">
-                RBS3010NA01BN00<br>
-                RBS3010EU01BN00<br>
-                RBS3010AU01BN00<br>
-                RBS301-DWS<br>
-                RBS305-DWS<br>
-                RBS306-DWS
-            </div>
-            <button class="modal-close" onclick="closeDoorWindowSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Push Button Sensor List -->
-    <div id="pushButtonSensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">RadioBridge Push Button Sensor List</div>
-            <div class="modal-content">
-                RBS304-1 Single Push Button
-            </div>
-            <button class="modal-close" onclick="closePushButtonSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Ultrasonic Level Sensor List -->
-    <div id="ultrasonicSensorModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">Wireless Ultrasonic Level Sensor List</div>
-            <div class="modal-content">
-                RBS306-ULS
-            </div>
-            <button class="modal-close" onclick="closeUltrasonicSensorList()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for General Config Info -->
-    <div id="generalConfigModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">General Sensor Configuration</div>
-            <div class="modal-content">
-                Use these settings to configure a RadioBridge Sensor's general configuration parameters, including Supervisory Period, ADR, Confirmed Messages, etc.<br><br>The hexcode generated can be used with any RadioBridge sensor.
-            </div>
-            <button class="modal-close" onclick="closeGeneralConfigInfo()">OK</button>
-        </div>
-    </div>
-
-    <!-- Modal Dialog for Advanced Config Info -->
-    <div id="advancedConfigModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">Advanced Sensor Configuration</div>
-            <div class="modal-content">
-                Use these settings to configure any RadioBridge Sensor's advanced configuration parameters.<br><br>The only adjustable setting is Link Quality Message. This setting determines how often the sensor sends a message that contains RSSI and SNR signal statistics as received by the sensor.
-            </div>
-            <button class="modal-close" onclick="closeAdvancedConfigInfo()">OK</button>
-        </div>
-    </div>
-
-    <script>
-        function showTempSensorList() {
-            document.getElementById('tempSensorModal').style.display = 'flex';
-        }
-        function closeTempSensorList() {
-            document.getElementById('tempSensorModal').style.display = 'none';
-        }
-        function showDryContactSensorList() {
-            document.getElementById('dryContactSensorModal').style.display = 'flex';
-        }
-        function closeDryContactSensorList() {
-            document.getElementById('dryContactSensorModal').style.display = 'none';
-        }
-        function showMovementSensorList() {
-            document.getElementById('movementSensorModal').style.display = 'flex';
-        }
-        function closeMovementSensorList() {
-            document.getElementById('movementSensorModal').style.display = 'none';
-        }
-        function showTempHumiditySensorList() {
-            document.getElementById('tempHumiditySensorModal').style.display = 'flex';
-        }
-        function closeTempHumiditySensorList() {
-            document.getElementById('tempHumiditySensorModal').style.display = 'none';
-        }
-        function showWaterLeakSensorList() {
-            document.getElementById('waterLeakSensorModal').style.display = 'flex';
-        }
-        function closeWaterLeakSensorList() {
-            document.getElementById('waterLeakSensorModal').style.display = 'none';
-        }
-        function show420maSensorList() {
-            document.getElementById('sensor420maModal').style.display = 'flex';
-        }
-        function close420maSensorList() {
-            document.getElementById('sensor420maModal').style.display = 'none';
-        }
-        function showTiltSensorList() {
-            document.getElementById('tiltSensorModal').style.display = 'flex';
-        }
-        function closeTiltSensorList() {
-            document.getElementById('tiltSensorModal').style.display = 'none';
-        }
-        function showDoorWindowSensorList() {
-            document.getElementById('doorWindowSensorModal').style.display = 'flex';
-        }
-        function closeDoorWindowSensorList() {
-            document.getElementById('doorWindowSensorModal').style.display = 'none';
-        }
-        function showPushButtonSensorList() {
-            document.getElementById('pushButtonSensorModal').style.display = 'flex';
-        }
-        function closePushButtonSensorList() {
-            document.getElementById('pushButtonSensorModal').style.display = 'none';
-        }
-        function showUltrasonicSensorList() {
-            document.getElementById('ultrasonicSensorModal').style.display = 'flex';
-        }
-        function closeUltrasonicSensorList() {
-            document.getElementById('ultrasonicSensorModal').style.display = 'none';
-        }
-        function showGeneralConfigInfo() {
-            document.getElementById('generalConfigModal').style.display = 'flex';
-        }
-        function closeGeneralConfigInfo() {
-            document.getElementById('generalConfigModal').style.display = 'none';
-        }
-        function showAdvancedConfigInfo() {
-            document.getElementById('advancedConfigModal').style.display = 'flex';
-        }
-        function closeAdvancedConfigInfo() {
-            document.getElementById('advancedConfigModal').style.display = 'none';
-        }
-    </script>
 </body>
 </html>

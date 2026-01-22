@@ -33,3 +33,23 @@ function copyHexcode() {
     });
 }
 
+function scheduleDownlink() {
+    const hexcode = document.getElementById('hex-output').textContent;
+    if (!hexcode) {
+        alert('Please generate a hexcode first.');
+        return;
+    }
+    // Redirect to downlinks page with hexcode and sensor type
+    const sensorType = "advanced"; // Advanced config can be used with any sensor
+    window.location.href = `../downlinks.html?hexcode=${encodeURIComponent(hexcode)}&sensorType=${encodeURIComponent(sensorType)}`;
+}
+
+// Show schedule button when hexcode is generated
+const originalGenerateHexcode = generateHexcode;
+generateHexcode = function() {
+    originalGenerateHexcode();
+    const scheduleButton = document.getElementById('schedule-button');
+    if (scheduleButton) {
+        scheduleButton.style.display = 'inline-block';
+    }
+};

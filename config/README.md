@@ -10,3 +10,4 @@ The configuration file contains the following settings:
 - `port`: The port number to run the server on (default: 5000)
 - `debug`: Enable debug mode for Flask (default: false)
 
+

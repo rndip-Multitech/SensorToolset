@@ -112,3 +112,4 @@ Application logs can be found in:
 - The server automatically handles routing for nested directories
 - The application is designed to run as a background service managed by app-manager
 
+

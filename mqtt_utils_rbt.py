@@ -14,9 +14,25 @@ See: https://www.multitech.net/developer/software/lora/lora-network-server/mqtt-
 import base64
 import json
 from typing import Any, Dict, List
+from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
+
+# Try to import the enhanced decoder from network-dashboard
+try:
+    import sys
+    import os
+    # Add the NetworkDashboard static/py directory to the path
+    network_dashboard_py_path = os.path.join(os.path.dirname(__file__), 'NetworkDashboard-0.1', 'static', 'py')
+    if network_dashboard_py_path not in sys.path:
+        sys.path.insert(0, network_dashboard_py_path)
+    from radiobridgev3 import Decoder
+    ENHANCED_DECODER_AVAILABLE = True
+    rb_decoder = Decoder()
+except ImportError:
+    ENHANCED_DECODER_AVAILABLE = False
+    rb_decoder = None
 
 
 # Minimal copy of the message_type_map so we don't depend on the
@@ -95,27 +111,90 @@ def decode_sensor_data(data: str) -> Dict[str, Any]:
             "message_type": message_type_map.get(message_type, f"Unknown ({message_type})"),
         }
 
-        if message_type == 0x08:
+        if message_type == 0x00:  # Reset Message
+            decoded_message["reset_info"] = payload[:6].hex() if len(payload) >= 6 else payload.hex()
+        elif message_type == 0x01:  # Supervisory Message
+            battery_voltage_hex = format(payload[2], "02x") if len(payload) > 2 else "00"
+            battery_voltage = int(battery_voltage_hex, 16) * 0.1
             decoded_message.update(
                 {
-                    "water_status": "Water present" if payload[0] == 0x00 else "Water not present",
-                    "Measurement (0-255)": payload[1],
-                }
-            )
-        elif message_type == 0x00:
-            decoded_message["reset_info"] = payload[:6].hex()
-        elif message_type == 0x01:
-            battery_voltage_hex = format(payload[2], "02x")
-            battery_voltage = int(battery_voltage_hex) * 0.1
-            decoded_message.update(
-                {
-                    "device_error_code": payload[0],
-                    "current_sensor_state": payload[1],
+                    "device_error_code": payload[0] if len(payload) > 0 else 0,
+                    "current_sensor_state": payload[1] if len(payload) > 1 else 0,
                     "battery_voltage_hex": battery_voltage_hex,
                     "battery_voltage": battery_voltage,
                 }
             )
-        elif message_type == 0x0D:
+        elif message_type == 0x03:  # Door/Window Sensor
+            status = payload[0] if len(payload) > 0 else 0
+            decoded_message.update(
+                {
+                    "open_close_status": "Open" if status == 0x00 else "Closed",
+                }
+            )
+        elif message_type == 0x06:  # Push Button Sensor
+            button_id = payload[0] if len(payload) > 0 else 0
+            action = payload[1] if len(payload) > 1 else 0
+            action_map = {0x00: "Button Pressed", 0x01: "Button Released", 0x02: "Button Hold"}
+            decoded_message.update(
+                {
+                    "button_id": button_id,
+                    "action_performed": action_map.get(action, f"Unknown ({action})"),
+                }
+            )
+        elif message_type == 0x07:  # Dry Contact Sensor
+            status = payload[0] if len(payload) > 0 else 0
+            decoded_message.update(
+                {
+                    "connection_status": "Connected" if status == 0x00 else "Disconnected",
+                }
+            )
+        elif message_type == 0x08:  # Water Leak Sensor
+            decoded_message.update(
+                {
+                    "water_status": "Water present" if payload[0] == 0x00 else "Water not present",
+                    "Measurement (0-255)": payload[1] if len(payload) > 1 else 0,
+                }
+            )
+        elif message_type == 0x09:  # Thermistor Temperature Sensor
+            event_type = payload[0] if len(payload) > 0 else 0
+            integer_temp = payload[1] & 0x7F if len(payload) > 1 else 0
+            sign_temp = (payload[1] & 0x80) >> 7 if len(payload) > 1 else 0
+            integer_temp = integer_temp if sign_temp == 0 else -integer_temp
+            decimal_temp = (payload[2] >> 4) / 10.0 if len(payload) > 2 else 0.0
+            temperature_celsius = integer_temp + decimal_temp
+            temperature_fahrenheit = (temperature_celsius * 9 / 5) + 32
+            
+            event_type_map = {
+                0x00: "Periodic Report",
+                0x01: "Temperature above upper threshold",
+                0x02: "Temperature below lower threshold",
+                0x03: "Temperature report-on-change increase",
+                0x04: "Temperature report-on-change decrease",
+            }
+            decoded_message.update(
+                {
+                    "event_type": event_type_map.get(event_type, f"Unknown ({event_type})"),
+                    "current_temperature": f"{temperature_fahrenheit:.1f} °F ({temperature_celsius:.1f} °C)",
+                }
+            )
+        elif message_type == 0x0A:  # Tilt Sensor
+            event_type = payload[0] if len(payload) > 0 else 0
+            angle = payload[1] if len(payload) > 1 else 0
+            
+            event_type_map = {
+                0x00: "Periodic Report",
+                0x01: "Tilt angle above threshold",
+                0x02: "Tilt angle below threshold",
+                0x03: "Tilt angle report-on-change increase",
+                0x04: "Tilt angle report-on-change decrease",
+            }
+            decoded_message.update(
+                {
+                    "event_type": event_type_map.get(event_type, f"Unknown ({event_type})"),
+                    "angle_of_tilt": f"{angle}°",
+                }
+            )
+        elif message_type == 0x0D:  # Temperature and Humidity Sensor
             decoded_message["data"] = decode_temp_humidity_sensor(payload)
         else:
             decoded_message["payload"] = payload.hex()
@@ -138,24 +217,60 @@ def _on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
     print(f"Received MQTT message on {topic}: {message}")
     try:
         data = json.loads(message)
+        
+        # Use enhanced decoder if available, otherwise fall back to basic decoder
         if isinstance(data, dict) and "data" in data:
-            data["data_decoded"] = decode_sensor_data(data["data"])
+            if ENHANCED_DECODER_AVAILABLE and 'up' in topic and data.get('data'):
+                try:
+                    # Use the enhanced decoder from network-dashboard
+                    decoded_bytes = base64.b64decode(data['data'])
+                    rb_data_decoded = rb_decoder.decodePayload(data, decoded_bytes)
+                    if rb_data_decoded:
+                        data["data_decoded"] = rb_data_decoded
+                        # Map event to message_type for compatibility
+                        if "event" in rb_data_decoded:
+                            event = rb_data_decoded["event"]
+                            # Map event names to message types for sensor discovery
+                            event_to_type = {
+                                "water": "Water Leak Sensor",
+                                "door_window": "Door/Window Sensor",
+                                "push_button": "Push Button Sensor",
+                                "contact": "Dry Contact Sensor",
+                                "temperature": "Thermistor Temperature Sensor",
+                                "tilt": "Tilt Sensor",
+                                "air_temperature_humidity": "Temperature and Humidity Sensor",
+                                "supervisory": "Supervisory Message",
+                                "reset": "Reset Message",
+                            }
+                            message_type = event_to_type.get(event, event)
+                        else:
+                            message_type = None
+                except Exception as e:
+                    print(f"Enhanced decoder failed, using basic decoder: {e}")
+                    data["data_decoded"] = decode_sensor_data(data["data"])
+                    message_type = data["data_decoded"].get("message_type")
+            else:
+                # Use basic decoder
+                data["data_decoded"] = decode_sensor_data(data["data"])
+                message_type = data["data_decoded"].get("message_type")
 
-            # Scrape DevEUI and sensor type
+            # Scrape DevEUI and sensor type for sensor discovery
             dev_eui = data.get("deveui")
-            message_type = data["data_decoded"].get("message_type")
+            if dev_eui and message_type:
+                if isinstance(message_type, str):
+                    sensor_type = message_type.lower()
+                    if not any(
+                        unwanted in sensor_type
+                        for unwanted in ("unknown", "supervisory message", "reset message", "downlink", "device_info", "link_quality")
+                    ):
+                        sensor_entry = {"DevEUI": dev_eui, "sensor_type": sensor_type}
+                        if sensor_entry not in sensor_list:
+                            sensor_list.append(sensor_entry)
+                            print(f"Discovered sensor: {sensor_entry}")
 
-            if dev_eui and isinstance(message_type, str):
-                sensor_type = message_type.lower()
-                if not any(
-                    unwanted in sensor_type
-                    for unwanted in ("unknown", "supervisory message", "reset message", "downlink")
-                ):
-                    sensor_entry = {"DevEUI": dev_eui, "sensor_type": sensor_type}
-                    if sensor_entry not in sensor_list:
-                        sensor_list.append(sensor_entry)
-                        print(f"Discovered sensor: {sensor_entry}")
-
+        # Add current timestamp
+        data['current_time'] = datetime.now().astimezone().isoformat()
+        
         message_buffer.append({"type": "json", "topic": topic, "data": data})
     except json.JSONDecodeError:
         message_buffer.append({"type": "text", "topic": topic, "data": message})
@@ -211,15 +326,36 @@ def send_downlink(data: Dict[str, Any], broker_ip: str | None = None) -> Dict[st
     The payload is published to 'lora/<DEV-EUI>/down' as JSON with a base64-encoded
     'data' field, matching the examples in the MultiTech documentation:
     https://www.multitech.net/developer/software/lora/lora-network-server/mqtt-messages/
+    
+    If 'hexcode' is provided in data (as base64), it will be used directly instead
+    of constructing the message from form fields.
     """
     target_broker = broker_ip or current_broker_ip
     if not target_broker:
         return {"error": "No MQTT broker configured"}
 
-    if "topic" not in data or "sensor_type" not in data:
-        return {"error": "Missing required keys: 'topic' or 'sensor_type'"}
-
+    if "topic" not in data:
+        return {"error": "Missing required key: 'topic'"}
+    
     topic = data["topic"]
+    
+    # If hexcode is provided, use it directly
+    if "hexcode" in data:
+        try:
+            # hexcode is already base64 encoded from the client
+            hexcode_base64 = data["hexcode"]
+            payload = json.dumps({"data": hexcode_base64})
+            
+            print(f"Publishing downlink to {topic} via {target_broker} with preloaded hexcode: {payload}")
+            publish.single(topic, payload, hostname=target_broker)
+            return {"message": "Downlink message sent successfully"}
+        except Exception as e:
+            return {"error": f"Error sending hexcode downlink: {str(e)}"}
+    
+    # Original logic: build downlink from form data
+    if "sensor_type" not in data:
+        return {"error": "Missing required key: 'sensor_type'"}
+
     sensor_type = data["sensor_type"]
 
     downlink_message: list[int] = []
@@ -243,23 +379,49 @@ def send_downlink(data: Dict[str, Any], broker_ip: str | None = None) -> Dict[st
                 0x00,  # Padding with zeros
             ]
         elif "temperature" in sensor_type and "humidity" in sensor_type:
-            mode = int(data["mode"], 16)
-            reporting_interval = int(data["reportingInterval"])
-            restoral_margin = int(data["restoralMargin"])
-            lower_temp_threshold = int(data["lowerTempThreshold"])
-            upper_temp_threshold = int(data["upperTempThreshold"])
-            lower_humidity_threshold = int(data["lowerHumidityThreshold"])
-            upper_humidity_threshold = int(data["upperHumidityThreshold"])
-            downlink_message = [
-                0x0D,  # Air Temperature and Humidity sensor configuration
-                mode,
-                reporting_interval,
-                restoral_margin,
-                lower_temp_threshold,
-                upper_temp_threshold,
-                lower_humidity_threshold,
-                upper_humidity_threshold,
-            ]
+            mode = int(data["mode"], 16) if isinstance(data["mode"], str) and data["mode"].startswith("0x") else int(data["mode"])
+            reporting_interval = int(data.get("reportingInterval", 10))
+            
+            # Handle both threshold mode (with separate temp/humidity restoral) and ROC mode
+            if mode == 0x00:  # Threshold mode
+                # For threshold mode, combine restoral margins (temp in lower 4 bits, humidity in upper 4 bits)
+                restoral_margin_temp = int(data.get("restoralMarginTemp", 2))
+                restoral_margin_humidity = int(data.get("restoralMarginHumidity", 5))
+                restoral_margin = (restoral_margin_humidity << 4) | (restoral_margin_temp & 0x0F)
+                
+                lower_temp_threshold = int(data.get("lowerTempThreshold", 60))
+                upper_temp_threshold = int(data.get("upperTempThreshold", 80))
+                lower_humidity_threshold = int(data.get("lowerHumidityThreshold", 20))
+                upper_humidity_threshold = int(data.get("upperHumidityThreshold", 80))
+                
+                downlink_message = [
+                    0x0D,  # Air Temperature and Humidity sensor configuration
+                    mode,
+                    reporting_interval,
+                    restoral_margin,
+                    lower_temp_threshold,
+                    upper_temp_threshold,
+                    lower_humidity_threshold,
+                    upper_humidity_threshold,
+                ]
+            elif mode == 0x01:  # Report-on-change mode
+                temp_increase = int(data.get("tempIncrease", 2))
+                temp_decrease = int(data.get("tempDecrease", 2))
+                humidity_increase = int(data.get("humidityIncrease", 5))
+                humidity_decrease = int(data.get("humidityDecrease", 5))
+                
+                downlink_message = [
+                    0x0D,
+                    mode,
+                    reporting_interval,
+                    0x00,  # Padding for restoral margin in ROC mode
+                    temp_increase,
+                    temp_decrease,
+                    humidity_increase,
+                    humidity_decrease,
+                ]
+            else:
+                return {"error": f"Invalid mode value: {mode}"}
         else:
             return {"error": f"Unsupported sensor_type '{sensor_type}' for automatic encoding"}
 

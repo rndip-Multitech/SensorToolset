@@ -200,5 +200,23 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     });
 
+
+    /* ============================================================
+       Schedule Downlink
+    ============================================================ */
+    const scheduleButton = document.getElementById("schedule-button");
+    if (scheduleButton) {
+        scheduleButton.addEventListener("click", () => {
+            const hexcode = hexOutput.textContent;
+            if (!hexcode) {
+                showDialog("Please generate a hexcode first.");
+                return;
+            }
+            // Redirect to downlinks page with hexcode and sensor type
+            const sensorType = "ultrasonic distance sensor";
+            window.location.href = `../downlinks.html?hexcode=${encodeURIComponent(hexcode)}&sensorType=${encodeURIComponent(sensorType)}`;
+        });
+    }
+
 });
 

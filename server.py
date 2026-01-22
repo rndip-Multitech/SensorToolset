@@ -8,12 +8,11 @@ This will serve all of the HTML pages for configuring RadioBridge sensors.
 Importing the required libraries.
 """
 from flask import Flask, send_from_directory, send_file, jsonify, request
+from werkzeug.utils import secure_filename
 import json
 import logging
 import os
 import argparse
-
-from mqtt_utils_rbt import connect_to_broker, get_sensors, send_downlink
 
 """
 Creating the Flask app and setting the template and static directories.
@@ -22,6 +21,54 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Custom decoder storage (served as static files)
+CUSTOM_DECODER_DIR = os.path.join(
+    os.path.dirname(__file__),
+    "NetworkDashboard-0.1",
+    "static",
+    "js",
+    "decoders",
+    "custom",
+)
+os.makedirs(CUSTOM_DECODER_DIR, exist_ok=True)
+
+
+def _is_safe_decoder_filename(name: str) -> bool:
+    """Allow only simple .js filenames (no paths)."""
+    if not name or not isinstance(name, str):
+        return False
+    if "/" in name or "\\" in name:
+        return False
+    if not name.lower().endswith(".js"):
+        return False
+    return True
+
+
+def _decoder_file_url(filename: str) -> str:
+    return f"/NetworkDashboard-0.1/static/js/decoders/custom/{filename}"
+
+# Try to import MQTT utilities - gracefully handle if paho-mqtt isn't installed
+try:
+    from mqtt_utils_rbt import connect_to_broker, get_sensors, send_downlink, get_messages
+    MQTT_AVAILABLE = True
+    logger.info("MQTT utilities loaded successfully")
+except ImportError as e:
+    logger.warning(f"MQTT utilities not available: {e}. MQTT features will be disabled.")
+    MQTT_AVAILABLE = False
+    
+    # Define stub functions so routes don't fail
+    def connect_to_broker(broker, port, topic):
+        return {"error": "MQTT not available. Please install paho-mqtt."}, 500
+    
+    def get_sensors():
+        return {"sensors": []}
+    
+    def get_messages():
+        return []
+    
+    def send_downlink(data, broker_ip):
+        return {"error": "MQTT not available. Please install paho-mqtt."}, 500
 
 # Configuration
 config = {
@@ -58,6 +105,18 @@ def downlinks_page():
     return send_file('downlinks.html')
 
 
+@app.route('/tools_downlinks')
+def tools_downlinks_page():
+    """Serve the generic downlink tools page."""
+    return send_file('tools_downlinks.html')
+
+
+@app.route('/sensors')
+def sensors_page():
+    """Serve the sensor monitoring page."""
+    return send_file('sensors.html')
+
+
 @app.route('/connect', methods=['POST'])
 def connect_route():
     """
@@ -87,6 +146,121 @@ def get_sensors_route():
     return jsonify({"sensors": sensors}), 200
 
 
+@app.route('/messages', methods=['GET'])
+def get_messages_route():
+    """Return the buffered MQTT messages, optionally filtered by DevEUI."""
+    try:
+        from mqtt_utils_rbt import get_messages
+        filter_deveui = request.args.get('filter', '').strip()
+        messages = get_messages()
+        
+        # Filter by DevEUI if provided
+        if filter_deveui:
+            filtered_messages = []
+            for msg in messages:
+                if msg.get('type') == 'json' and 'data' in msg:
+                    deveui = msg['data'].get('deveui', '')
+                    if filter_deveui.lower() in deveui.lower():
+                        filtered_messages.append(msg)
+            messages = filtered_messages
+        
+        return jsonify({"messages": messages}), 200
+    except ImportError:
+        return jsonify({"messages": [], "error": "MQTT utilities not available"}), 200
+    except Exception as e:
+        logger.error(f"Error fetching messages: {e}")
+        return jsonify({"messages": [], "error": str(e)}), 500
+
+
+@app.route('/api/decoders/list', methods=['GET'])
+def list_decoders_route():
+    """List uploaded custom decoder JS files."""
+    files = []
+    try:
+        for fname in sorted(os.listdir(CUSTOM_DECODER_DIR)):
+            if not _is_safe_decoder_filename(fname):
+                continue
+            fpath = os.path.join(CUSTOM_DECODER_DIR, fname)
+            if not os.path.isfile(fpath):
+                continue
+            stat = os.stat(fpath)
+            files.append(
+                {
+                    "name": fname,
+                    "url": _decoder_file_url(fname),
+                    "size": stat.st_size,
+                    "mtime": stat.st_mtime,
+                }
+            )
+        return jsonify({"files": files}), 200
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error listing decoders: {e}")
+        return jsonify({"files": [], "error": str(e)}), 500
+
+
+@app.route('/api/decoders/upload', methods=['POST'])
+def upload_decoder_route():
+    """Upload a decoder JS file (multipart form: file)."""
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "Missing file"}), 400
+        file = request.files["file"]
+        if not file or not file.filename:
+            return jsonify({"error": "Empty filename"}), 400
+
+        fname = secure_filename(file.filename)
+        if not _is_safe_decoder_filename(fname):
+            return jsonify({"error": "Only .js files are allowed"}), 400
+
+        dest = os.path.join(CUSTOM_DECODER_DIR, fname)
+        file.save(dest)
+        return jsonify({"name": fname, "url": _decoder_file_url(fname)}), 200
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error uploading decoder: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/decoders/save', methods=['POST'])
+def save_decoder_route():
+    """Save a decoder JS from text (JSON: {name, content})."""
+    try:
+        data = request.get_json() or {}
+        name = secure_filename(str(data.get("name", "")).strip())
+        content = str(data.get("content", ""))
+        if not _is_safe_decoder_filename(name):
+            return jsonify({"error": "Invalid filename (must end with .js, no paths)"}), 400
+        if not content.strip():
+            return jsonify({"error": "Empty content"}), 400
+
+        dest = os.path.join(CUSTOM_DECODER_DIR, name)
+        with open(dest, "w", encoding="utf-8") as f:
+            f.write(content)
+            if not content.endswith("\n"):
+                f.write("\n")
+        return jsonify({"name": name, "url": _decoder_file_url(name)}), 200
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error saving decoder: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/decoders/delete', methods=['POST'])
+def delete_decoder_route():
+    """Delete a decoder JS file (JSON: {name})."""
+    try:
+        data = request.get_json() or {}
+        name = secure_filename(str(data.get("name", "")).strip())
+        if not _is_safe_decoder_filename(name):
+            return jsonify({"error": "Invalid filename"}), 400
+        dest = os.path.join(CUSTOM_DECODER_DIR, name)
+        if not os.path.isfile(dest):
+            return jsonify({"error": "File not found"}), 404
+        os.remove(dest)
+        return jsonify({"name": name}), 200
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error deleting decoder: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/send_downlink', methods=['POST'])
 def send_downlink_route():
     """
@@ -96,9 +270,19 @@ def send_downlink_route():
     `NetworkDashboard-0.1/static/js/downlinks.js`.
     """
     data = request.get_json() or {}
-    result = send_downlink(data)
-    status = 200 if "message" in result else 400
-    return jsonify(result), status
+    logger.info(f"Received downlink request: {json.dumps(data)}")
+    
+    # Extract broker from data if provided, otherwise use current connection
+    broker_ip = data.pop('broker', None)
+    
+    try:
+        result = send_downlink(data, broker_ip=broker_ip)
+        status = 200 if "message" in result else 400
+        logger.info(f"Downlink result: {result}, status: {status}")
+        return jsonify(result), status
+    except Exception as e:
+        logger.error(f"Error sending downlink: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/<path:path>')
@@ -151,7 +335,7 @@ def page_not_found(e):
 Following used to run the Flask app.
 """
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='RadioBridge Tools Server')
+    parser = argparse.ArgumentParser(description='Sensor Toolkit Server')
     parser.add_argument('--cfgfile', type=str, help='Path to configuration file')
     parser.add_argument('--logfile', type=str, help='Path to log file')
     parser.add_argument('--host', type=str, default=config['host'], help='Host to bind to')
@@ -180,5 +364,5 @@ if __name__ == '__main__':
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     
-    logger.info(f"Starting RadioBridge Tools server on {config['host']}:{config['port']}")
+    logger.info(f"Starting Sensor Toolkit server on {config['host']}:{config['port']}")
     app.run(host=config['host'], port=config['port'], debug=config['debug'])

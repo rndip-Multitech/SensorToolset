@@ -4,8 +4,34 @@
 APP_DIR="${APP_DIR:-$(pwd)}"
 OPKG_CMD_PREFIX="opkg install --force-depends"
 OPKG_CMD_PREFIX_R="opkg remove --force-depends "
-MANIFEST="${APP_DIR}/provisioning/p_manifest.json"
 NAME="Install"
+
+# Detect mPower version by checking OS version
+# mPower 6: Not mLinux 7
+# mPower 7: mLinux 7
+detect_mpower_version() {
+    # Check the OS version from /etc/issue
+    if [ -f /etc/issue ]; then
+        OS_VERSION=$(cat /etc/issue | grep -o 'mLinux 7')
+        if [ "$OS_VERSION" = "mLinux 7" ]; then
+            echo "mPower 7"
+            return 0
+        fi
+    fi
+    # Default to mPower 6 if not mLinux 7
+    echo "mPower 6"
+    return 0
+}
+
+MPOWER_VERSION=$(detect_mpower_version)
+if [ "$MPOWER_VERSION" = "mPower 7" ]; then
+    PROVISIONING_DIR="${APP_DIR}/provisioning"
+    PROVISIONING_SUBDIR=""
+else
+    PROVISIONING_DIR="${APP_DIR}/provisioning/mpower6"
+    PROVISIONING_SUBDIR="mpower6"
+fi
+MANIFEST="${PROVISIONING_DIR}/p_manifest.json"
 
 # Log the script invocation with argument
 echo "Install script called with argument: $1"
@@ -20,29 +46,81 @@ logger -t Install "Current directory: $(pwd)"
 # and executes an "opkg install" on each package file listed in the p_manifest.
 #
 function install_packages {
+    echo "install_packages: Starting"
+    logger -t Install "install_packages: Starting"
+    echo "install_packages: APP_DIR=$APP_DIR"
+    logger -t Install "install_packages: APP_DIR=$APP_DIR"
+    echo "install_packages: MANIFEST=$MANIFEST"
+    logger -t Install "install_packages: MANIFEST=$MANIFEST"
+    
     if [ ! -f "$MANIFEST" ]; then
-        echo "Manifest file not found: $MANIFEST"
-        logger -t Install "Manifest file not found: $MANIFEST"
-        return
+        echo "WARNING: Manifest file not found: $MANIFEST - skipping package installation"
+        logger -t Install "WARNING: Manifest file not found: $MANIFEST - skipping package installation"
+        return 0
     fi
+    
+    # Check if jsparser is available
+    if ! command -v jsparser >/dev/null 2>&1; then
+        echo "ERROR: jsparser command not found. Cannot parse manifest."
+        logger -t Install "ERROR: jsparser command not found. Cannot parse manifest."
+        exit 1
+    fi
+    
+    echo "Reading manifest file: $MANIFEST"
+    logger -t Install "Reading manifest file: $MANIFEST"
     JSONTXT=$(<"$MANIFEST")
-    PKGCNT=$(echo $JSONTXT | jsparser --count -p /pkgs)
-
+    
+    if [ -z "$JSONTXT" ]; then
+        echo "ERROR: Manifest file is empty: $MANIFEST"
+        logger -t Install "ERROR: Manifest file is empty: $MANIFEST"
+        exit 1
+    fi
+    
+    echo "Parsing manifest JSON..."
+    logger -t Install "Parsing manifest JSON..."
+    PKGCNT=$(echo "$JSONTXT" | jsparser --count -p /pkgs 2>&1)
     RETURNCODE=$?
+
     if [ $RETURNCODE -ne 0 ]; then
-      echo "Failed to parse p_manifest.json as json"
-      logger -t Install "Failed to parse p_manifest.json as json"
+      echo "ERROR: Failed to parse p_manifest.json as json (exit code: $RETURNCODE)"
+      echo "jsparser output: $PKGCNT"
+      logger -t Install "ERROR: Failed to parse p_manifest.json as json (exit code: $RETURNCODE)"
+      logger -t Install "jsparser output: $PKGCNT"
       exit $RETURNCODE
     fi
+    
+    if [ -z "$PKGCNT" ] || [ "$PKGCNT" -eq 0 ]; then
+        echo "INFO: No packages to install in manifest"
+        logger -t Install "INFO: No packages to install in manifest"
+        return 0
+    fi
+    
+    echo "Found $PKGCNT packages to install"
+    logger -t Install "Found $PKGCNT packages to install"
 
     for ((i=0; i < PKGCNT; i++))
     do
-        PKG=$(echo $JSONTXT | jsparser --jsobj -p /pkgs/$i)
-        PKGNM=$(echo $PKG | jsparser -p /FileName)
-        PKGTYPE=$(echo $PKG | jsparser -p /type)
+        echo "Processing package $((i+1)) of $PKGCNT"
+        logger -t Install "Processing package $((i+1)) of $PKGCNT"
+        
+        PKG=$(echo "$JSONTXT" | jsparser --jsobj -p /pkgs/$i 2>&1)
+        PKG_PARSE_RC=$?
+        if [ $PKG_PARSE_RC -ne 0 ]; then
+            echo "ERROR: Failed to parse package $i from manifest"
+            logger -t Install "ERROR: Failed to parse package $i from manifest: $PKG"
+            exit $PKG_PARSE_RC
+        fi
+        
+        PKGNM=$(echo "$PKG" | jsparser -p /FileName 2>&1)
+        PKGTYPE=$(echo "$PKG" | jsparser -p /type 2>&1)
 
         if [ "$PKGTYPE" == "ipk" ]; then
-            PKGFILE="${APP_DIR}/provisioning/${PKGNM}"
+            # Use the detected provisioning directory
+            if [ -n "$PROVISIONING_SUBDIR" ]; then
+                PKGFILE="${APP_DIR}/provisioning/${PROVISIONING_SUBDIR}/${PKGNM}"
+            else
+                PKGFILE="${APP_DIR}/provisioning/${PKGNM}"
+            fi
             PKGCMD="${OPKG_CMD_PREFIX} \"${PKGFILE}\""
             echo "Executing: $PKGCMD"
             logger -t Install "Executing: $PKGCMD"
@@ -141,7 +219,97 @@ function remove_packages {
 # function would be to reboot the Conduit after the install if necessary.
 #
 function post_install {
-    pip3 install -r requirements.txt
+    echo "Starting post_install"
+    logger -t Install "Starting post_install"
+    
+    # Check if requirements.txt exists
+    REQ_FILE="${APP_DIR}/requirements.txt"
+    if [ ! -f "$REQ_FILE" ]; then
+        echo "ERROR: requirements.txt not found: $REQ_FILE"
+        logger -t Install "ERROR: requirements.txt not found: $REQ_FILE"
+        return 1
+    fi
+    
+    echo "Found requirements.txt at: $REQ_FILE"
+    logger -t Install "Found requirements.txt at: $REQ_FILE"
+    cat "$REQ_FILE" | logger -t Install
+    
+    # Find pip3 - prefer python3 -m pip since pip3 command may not be in PATH
+    PIP3_CMD=""
+    
+    # First try python3 -m pip (most reliable on embedded systems)
+    if python3 -m pip --version >/dev/null 2>&1; then
+        PIP3_CMD="python3 -m pip"
+        echo "Using python3 -m pip"
+        logger -t Install "Using python3 -m pip"
+    elif command -v pip3 >/dev/null 2>&1; then
+        PIP3_CMD="pip3"
+        echo "Using pip3 command"
+        logger -t Install "Using pip3 command"
+    elif [ -f /usr/bin/pip3 ]; then
+        PIP3_CMD="/usr/bin/pip3"
+        echo "Using /usr/bin/pip3"
+        logger -t Install "Using /usr/bin/pip3"
+    else
+        # Last resort - try python3 -m pip even if version check failed
+        echo "WARNING: pip3 not found via standard methods, trying python3 -m pip anyway"
+        logger -t Install "WARNING: pip3 not found via standard methods, trying python3 -m pip anyway"
+        PIP3_CMD="python3 -m pip"
+    fi
+    
+    echo "Using pip command: $PIP3_CMD"
+    logger -t Install "Using pip command: $PIP3_CMD"
+    
+    # Verify pip works and show version
+    PIP_VERSION=$($PIP3_CMD --version 2>&1)
+    PIP_VER_RC=$?
+    if [ $PIP_VER_RC -eq 0 ]; then
+        echo "pip version: $PIP_VERSION"
+        logger -t Install "pip version: $PIP_VERSION"
+    else
+        echo "WARNING: Could not get pip version, but will attempt to use it anyway"
+        logger -t Install "WARNING: Could not get pip version: $PIP_VERSION"
+        echo "Attempting to use pip despite version check failure..."
+        logger -t Install "Attempting to use pip despite version check failure..."
+    fi
+    
+    # Install Python dependencies - try with --user first, then without
+    echo "Installing Python dependencies from requirements.txt"
+    logger -t Install "Installing Python dependencies from requirements.txt"
+    
+    # Try --user install first (safer, doesn't require root)
+    echo "Attempting installation with --user flag..."
+    logger -t Install "Attempting installation with --user flag..."
+    INSTALL_OUTPUT=$($PIP3_CMD install --user -r "$REQ_FILE" 2>&1)
+    RETURNCODE=$?
+    echo "$INSTALL_OUTPUT"
+    echo "$INSTALL_OUTPUT" | logger -t Install
+    
+    # If --user fails, try without --user (requires root/sudo)
+    if [ $RETURNCODE -ne 0 ]; then
+        echo "Install with --user failed (status $RETURNCODE), trying system-wide install"
+        logger -t Install "Install with --user failed (status $RETURNCODE), trying system-wide install"
+        INSTALL_OUTPUT=$($PIP3_CMD install -r "$REQ_FILE" 2>&1)
+        RETURNCODE=$?
+        echo "$INSTALL_OUTPUT"
+        echo "$INSTALL_OUTPUT" | logger -t Install
+    fi
+    
+    # If installation succeeded, we're done - don't do strict verification
+    # The import test can fail due to Python path issues even when packages are installed
+    if [ $RETURNCODE -eq 0 ]; then
+        echo "pip3 install completed successfully (exit code: $RETURNCODE)"
+        logger -t Install "pip3 install completed successfully (exit code: $RETURNCODE)"
+        echo "Python dependencies installation completed"
+        logger -t Install "Python dependencies installation completed"
+    else
+        echo "ERROR: pip3 install failed with status $RETURNCODE"
+        logger -t Install "ERROR: pip3 install failed with status $RETURNCODE"
+        echo "Last installation output:"
+        echo "$INSTALL_OUTPUT"
+        echo "$INSTALL_OUTPUT" | logger -t Install
+        return 1
+    fi
     
     # Configure firewall to allow port 5000
     echo "Configuring firewall to allow port 5000..."
@@ -222,7 +390,21 @@ case "$1" in
       logger -t Install "=== INSTALL STEP STARTED ==="
       echo -n "Installing dependencies: "
       logger -t Install "Installing Dependencies: "
-      install_packages
+      # Check the OS version to determine mPower version
+      OS_VERSION=$(cat /etc/issue 2>/dev/null | grep -o 'mLinux 7' || echo "")
+      if [ "$OS_VERSION" != "mLinux 7" ]; then
+          logger -t Install "Installing packages for mPower 6"
+          PROVISIONING_DIR="${APP_DIR}/provisioning/mpower6"
+          PROVISIONING_SUBDIR="mpower6"
+          MANIFEST="${PROVISIONING_DIR}/p_manifest.json"
+          install_packages
+      else
+          logger -t Install "Installing packages for mPower 7"
+          PROVISIONING_DIR="${APP_DIR}/provisioning"
+          PROVISIONING_SUBDIR=""
+          MANIFEST="${PROVISIONING_DIR}/p_manifest.json"
+          install_packages
+      fi
       INSTALL_RC=$?
       if [ $INSTALL_RC -ne 0 ]; then
           echo "ERROR: install_packages failed with status $INSTALL_RC"
@@ -238,7 +420,21 @@ case "$1" in
       logger -t Install "=== REMOVE STEP STARTED ==="
       echo -n "Removing Dependencies: "
       logger -t Install "Removing Dependencies: "
-      remove_packages
+      # Check the OS version to determine mPower version
+      OS_VERSION=$(cat /etc/issue 2>/dev/null | grep -o 'mLinux 7' || echo "")
+      if [ "$OS_VERSION" != "mLinux 7" ]; then
+          logger -t Install "Removing packages for mPower 6"
+          PROVISIONING_DIR="${APP_DIR}/provisioning/mpower6"
+          PROVISIONING_SUBDIR="mpower6"
+          MANIFEST="${PROVISIONING_DIR}/p_manifest.json"
+          remove_packages
+      else
+          logger -t Install "Removing packages for mPower 7"
+          PROVISIONING_DIR="${APP_DIR}/provisioning"
+          PROVISIONING_SUBDIR=""
+          MANIFEST="${PROVISIONING_DIR}/p_manifest.json"
+          remove_packages
+      fi
       REMOVE_RC=$?
       if [ $REMOVE_RC -ne 0 ]; then
           echo "ERROR: remove_packages failed with status $REMOVE_RC"
