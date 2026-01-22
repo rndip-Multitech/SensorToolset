@@ -1,8 +1,7 @@
 {
   "AppName": "Sensor Toolkit",
   "AppVersion": "1.4.0",
-  "AppDescription": "MQTT uplink monitor + pluggable payload decoders + RadioBridge configuration/downlinks",
-  "AppVersionNotes": "Added decoder management (upload/paste JS), generic home/navigation, and pluggable uplink decoding",
+  "AppDescription": "MQTT uplink monitor + pluggable payload decoders + sensor visualization + RadioBridge configuration/downlinks",
+  "AppVersionNotes": "Added sensor monitoring with charts (numeric time-series, binary status), message caching with IndexedDB, advanced filtering, CSV/JSON export, downlink encoder support, and improved decoder system",
   "PersistentStorage": true
 }
-
