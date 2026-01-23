@@ -10,9 +10,10 @@
         .sensor-card {
             margin: 20px 0;
             padding: 20px;
-            background-color: #fafafa;
+            background-color: #ffffff;
             border: 1px solid #e0e0e0;
-            border-radius: 4px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
         .sensor-header {
             display: flex;
@@ -20,11 +21,11 @@
             align-items: center;
             margin-bottom: 15px;
             padding-bottom: 10px;
-            border-bottom: 2px solid #00394d;
+            border-bottom: 2px solid #e0e0e0;
         }
         .sensor-header h3 {
             margin: 0;
-            color: #00394d;
+            color: #333;
         }
         .sensor-info {
             display: flex;
@@ -43,7 +44,7 @@
         }
         .info-value {
             font-size: 18px;
-            color: #00394d;
+            color: #333;
             font-weight: bold;
         }
         .status-indicator-grid {
@@ -111,8 +112,42 @@
         .status-light-value {
             font-size: 16px;
             font-weight: bold;
-            color: #00394d;
+            color: #333;
             margin-top: 8px;
+        }
+        .battery-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .battery-icon {
+            width: 40px;
+            height: 20px;
+            border: 2px solid #333;
+            border-radius: 3px;
+            position: relative;
+            background: linear-gradient(to right, #4caf50 0%, #4caf50 var(--battery-level, 100%), #e0e0e0 var(--battery-level, 100%), #e0e0e0 100%);
+        }
+        .battery-icon::after {
+            content: '';
+            position: absolute;
+            right: -6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 10px;
+            background: #333;
+            border-radius: 0 2px 2px 0;
+        }
+        .battery-text {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
         }
         .chart-container {
             position: relative;
@@ -121,6 +156,17 @@
         }
         .chart-container.small {
             height: 200px;
+        }
+        .chart-group {
+            margin-bottom: 30px;
+        }
+        .chart-group-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e0e0e0;
         }
         .no-data {
             text-align: center;
@@ -131,14 +177,24 @@
         .sensor-selector {
             margin: 20px 0;
             padding: 15px;
-            background-color: #f5f5f5;
-            border-radius: 4px;
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
         .sensor-selector select {
             width: 100%;
             max-width: 400px;
             padding: 8px;
             font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .auto-refresh-toggle {
+            margin-left: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
     </style>
 </head>
@@ -163,7 +219,7 @@
                     <img src="NetworkDashboard-0.1/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
                     <a href="uplinks.html">Uplinks</a>
                 </li>
-                <li class="item">
+                <li class="item active">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
                         <path d="M3 3v18h18"></path>
                         <path d="M7 16l4-4 4 4 6-6"></path>
@@ -175,7 +231,10 @@
                     <a href="downlinks.html">RadioBridge Downlinks</a>
                 </li>
                 <li class="item">
-                    <img src="NetworkDashboard-0.1/static/icons/send.svg" width="24" height="24" class="icon-margin" alt="Tools">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 2L11 13"></path>
+                        <path d="M22 2l-7 20-4-9-9-4 20-7z"></path>
+                    </svg>
                     <a href="tools_downlinks.html">Downlink Tools</a>
                 </li>
                 <li class="item">
@@ -206,7 +265,11 @@
                 <select id="sensorSelect">
                     <option value="">-- Loading sensors --</option>
                 </select>
-                <button type="button" class="action-button" id="refreshBtn" style="margin-left: 10px;">Refresh</button>
+                <button type="button" id="refreshBtn" style="margin-left: 10px;">Refresh</button>
+                <div class="auto-refresh-toggle">
+                    <input type="checkbox" id="autoRefresh" checked>
+                    <label for="autoRefresh">Auto-refresh (30s)</label>
+                </div>
             </div>
 
             <div id="sensorContent">
@@ -221,11 +284,14 @@
     <script src="NetworkDashboard-0.1/static/js/decoders/sensative_strips.js"></script>
     <script src="NetworkDashboard-0.1/static/js/decoders/raw.js"></script>
     <script>
-        // IndexedDB setup (reuse from uplinks.html)
+        // IndexedDB setup
         let db = null;
         const DB_NAME = 'RBTUplinksDB';
         const DB_VERSION = 1;
         const STORE_NAME = 'messages';
+        let currentCharts = {};
+        let autoRefreshInterval = null;
+        let currentDevEUI = null;
 
         function initDB() {
             return new Promise((resolve, reject) => {
@@ -247,7 +313,6 @@
             });
         }
 
-        // Get all cached messages for a specific DevEUI
         async function getSensorMessages(deveui) {
             if (!db) await initDB();
             return new Promise((resolve, reject) => {
@@ -263,7 +328,6 @@
                         messages.push(cursor.value);
                         cursor.continue();
                     } else {
-                        // Sort by time (newest first)
                         messages.sort((a, b) => new Date(b.time) - new Date(a.time));
                         resolve(messages);
                     }
@@ -272,7 +336,6 @@
             });
         }
 
-        // Get list of unique sensors from cache
         async function getSensorList() {
             if (!db) await initDB();
             return new Promise((resolve, reject) => {
@@ -297,7 +360,6 @@
             });
         }
 
-        // Fields to exclude from graphing (metadata, not sensor data)
         const EXCLUDED_FIELDS = new Set([
             'protocol_version', 'protocol', 'packet_count', 'packet_counter',
             'firmware_version', 'hardware_version', 'version',
@@ -305,54 +367,144 @@
             'port', 'fport', 'f_port',
             'eventType', 'event_type', 'message_type',
             'topic', 'time', 'cachedAt', 'fingerprint', 'id',
-            'deveui', 'dev_eui', 'device_eui'
+            'deveui', 'dev_eui', 'device_eui', 'historyStart', 'historyPosition',
+            'historycount', 'history_count', 'subbands', 'sub_bands', 'accumulation_count', 'accumulation'
         ]);
 
-        // Extract numeric values from decoded message (excluding metadata)
+        // Handle Sensative Strips array structure - decoded can be an array or nested structure
+        function normalizeDecoded(decoded) {
+            if (!decoded || typeof decoded !== 'object') return {};
+            
+            // Handle Sensative Strips nested structure: { port: 1, decoded: [...] }
+            if (decoded.decoded !== undefined && Array.isArray(decoded.decoded)) {
+                decoded = decoded.decoded;
+            }
+            
+            if (Array.isArray(decoded) && decoded.length > 0) {
+                // Merge all objects in array into one
+                const merged = {};
+                decoded.forEach(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        Object.assign(merged, item);
+                    }
+                });
+                return merged;
+            }
+            return decoded || {};
+        }
+
         function extractNumericValues(decoded, prefix = '') {
             const values = {};
+            decoded = normalizeDecoded(decoded);
             if (!decoded || typeof decoded !== 'object') return values;
 
-            // Fields we're interested in graphing
             const graphableFields = ['temperature', 'temp', 'humidity', 'hum', 'battery', 'voltage', 
                                    'rssi', 'snr', 'angle', 'distance', 'level', 'pressure', 
                                    'lux', 'light', 'current', 'value', 'measurement',
-                                   'celsius', 'fahrenheit', 'count', 'sequence', 'history'];
+                                   'celsius', 'fahrenheit', 'count', 'sequence', 'history', 'flood'];
 
             for (const key in decoded) {
                 const val = decoded[key];
                 const fullKey = prefix ? `${prefix}_${key}` : key;
                 const keyLower = key.toLowerCase();
                 
-                // Skip excluded fields
                 if (EXCLUDED_FIELDS.has(keyLower) || EXCLUDED_FIELDS.has(fullKey.toLowerCase())) {
                     continue;
                 }
 
                 if (typeof val === 'number') {
-                    // Only include if it's a graphable field or looks like sensor data
-                    if (graphableFields.some(f => keyLower.includes(f)) || 
-                        (keyLower !== 'id' && !keyLower.includes('port') && !keyLower.includes('count'))) {
-                        values[fullKey] = val;
+                    // Double-check exclusion (case-insensitive) - check all variations
+                    const isExcluded = EXCLUDED_FIELDS.has(keyLower) || 
+                                     EXCLUDED_FIELDS.has(fullKey.toLowerCase()) ||
+                                     EXCLUDED_FIELDS.has(key) ||
+                                     keyLower === 'historystart' || keyLower === 'history_start' ||
+                                     keyLower === 'historyposition' || keyLower === 'history_position' ||
+                                     keyLower.includes('historycount') || keyLower.includes('history_count') ||
+                                     keyLower.includes('subband') || keyLower.includes('sub_band') || keyLower.includes('subbands') || keyLower.includes('sub_bands') ||
+                                     (keyLower.includes('accumulation') && keyLower.includes('count'));
+                    
+                    if (!isExcluded) {
+                        if (graphableFields.some(f => keyLower.includes(f)) || 
+                            (keyLower !== 'id' && !keyLower.includes('port') && 
+                             !keyLower.includes('history') && !keyLower.includes('subbands') &&
+                             !(keyLower.includes('accumulation') && keyLower.includes('count')))) {
+                            values[fullKey] = val;
+                        }
                     }
                 } else if (typeof val === 'object' && val !== null) {
-                    // Recursively extract from nested objects
+                    // Handle Sensative Strips report structures: BatteryReport: { value: 99, unit: "%" }
                     if (val.value !== undefined && typeof val.value === 'number') {
-                        values[fullKey] = val.value;
+                        // Normalize key name: BatteryReport -> Battery, TempReport -> Temp, etc.
+                        let baseKey = key.replace(/Report$/, '').replace(/Alarm$/, '');
+                        // Handle specific Sensative Strips report types
+                        if (key === 'BatteryReport') {
+                            values['Battery'] = val.value;
+                        } else if (key === 'TempReport') {
+                            values['Temperature'] = val.value;
+                        } else if (key === 'HumidityReport') {
+                            values['Humidity'] = val.value;
+                        } else if (key === 'LuxReport' || key === 'LuxReport2') {
+                            values['Lux'] = val.value;
+                        } else if (key === 'FloodReport') {
+                            values['Flood'] = val.value;
+                        } else if (key === 'AverageTempReport') {
+                            values['AverageTemperature'] = val.value;
+                        } else if (key === 'TempHumReport') {
+                            // This has both temp and humidity: { humidity: {value: X, unit: '%'}, temp: {value: Y, unit: 'C'} }
+                            if (val.temp !== undefined && typeof val.temp === 'object' && val.temp.value !== undefined) {
+                                values['Temperature'] = val.temp.value;
+                            } else if (val.temp !== undefined && typeof val.temp === 'number') {
+                                values['Temperature'] = val.temp;
+                            }
+                            if (val.humidity !== undefined && typeof val.humidity === 'object' && val.humidity.value !== undefined) {
+                                values['Humidity'] = val.humidity.value;
+                            } else if (val.humidity !== undefined && typeof val.humidity === 'number') {
+                                values['Humidity'] = val.humidity;
+                            }
+                            continue;
+                        } else if (key === 'AvgTempHumReport') {
+                            if (val.temp !== undefined && typeof val.temp === 'object' && val.temp.value !== undefined) {
+                                values['AverageTemperature'] = val.temp.value;
+                            } else if (val.temp !== undefined && typeof val.temp === 'number') {
+                                values['AverageTemperature'] = val.temp;
+                            }
+                            if (val.humidity !== undefined && typeof val.humidity === 'object' && val.humidity.value !== undefined) {
+                                values['AverageHumidity'] = val.humidity.value;
+                            } else if (val.humidity !== undefined && typeof val.humidity === 'number') {
+                                values['AverageHumidity'] = val.humidity;
+                            }
+                            continue;
+                        } else if (key === 'TempDoorReport') {
+                            // { door: {value: bool}, temp: {value: Y, unit: 'C'} }
+                            if (val.temp !== undefined && typeof val.temp === 'object' && val.temp.value !== undefined) {
+                                values['Temperature'] = val.temp.value;
+                            } else if (val.temp !== undefined && typeof val.temp === 'number') {
+                                values['Temperature'] = val.temp;
+                            }
+                            continue;
+                        } else if (key === 'CapacitanceFloodReport' || key === 'CapacitancePadReport' || key === 'CapacitanceEndReport') {
+                            values['Capacitance'] = val.value;
+                        } else if (key === 'DoorCountReport') {
+                            values['DoorCount'] = val.value;
+                        } else if (key === 'IRProximityReport' || key === 'IRCloseProximityReport') {
+                            values['Proximity'] = val.value;
+                        } else {
+                            // Generic report with value - use normalized baseKey
+                            values[baseKey] = val.value;
+                        }
                     } else if (val.temp !== undefined && typeof val.temp === 'number') {
                         values[fullKey + '_temp'] = val.temp;
                     } else if (val.humidity !== undefined && typeof val.humidity === 'number') {
                         values[fullKey + '_humidity'] = val.humidity;
                     } else {
+                        // Recursively extract from nested objects
                         Object.assign(values, extractNumericValues(val, fullKey));
                     }
                 } else if (typeof val === 'string') {
-                    // Try to parse numeric strings, especially for common fields
                     const num = parseFloat(val);
                     if (!isNaN(num) && isFinite(num)) {
                         values[fullKey] = num;
                     } else if (graphableFields.some(f => keyLower.includes(f))) {
-                        // Try extracting number from string like "25.5 °C" or "25.5C"
                         const match = val.match(/-?\d+\.?\d*/);
                         if (match) {
                             const extracted = parseFloat(match[0]);
@@ -366,22 +518,20 @@
             return values;
         }
 
-        // Extract binary/status values (for light indicators)
         function extractBinaryValues(decoded, prefix = '') {
             const values = {};
+            decoded = normalizeDecoded(decoded);
             if (!decoded || typeof decoded !== 'object') return values;
 
-            // Binary/status field names we care about
             const statusFields = ['movement', 'tamper', 'door', 'window', 'contact', 'water', 
                                  'button', 'alarm', 'status', 'state', 'present', 'connected',
-                                 'open', 'closed', 'on', 'off', 'active', 'inactive'];
+                                 'open', 'closed', 'on', 'off', 'active', 'inactive', 'flood'];
 
             for (const key in decoded) {
                 const val = decoded[key];
                 const fullKey = prefix ? `${prefix}_${key}` : key;
                 const keyLower = key.toLowerCase();
                 
-                // Skip excluded fields
                 if (EXCLUDED_FIELDS.has(keyLower) || EXCLUDED_FIELDS.has(fullKey.toLowerCase())) {
                     continue;
                 }
@@ -399,10 +549,42 @@
                         values[fullKey] = val;
                     }
                 } else if (typeof val === 'object' && val !== null) {
-                    // Check for nested boolean values
+                    // Handle Sensative Strips alarm structures: TempAlarm: { high: false, low: false }
+                    // or FloodAlarm: { value: false, unit: "" }
                     if (val.value !== undefined && typeof val.value === 'boolean') {
-                        values[fullKey] = val.value;
+                        // Normalize alarm names
+                        let baseKey = key.replace(/Alarm$/, '').replace(/Report$/, '');
+                        if (key === 'TempAlarm') baseKey = 'TempAlarm';
+                        else if (key === 'AverageTempAlarm') baseKey = 'AverageTempAlarm';
+                        else if (key === 'FloodAlarm') baseKey = 'FloodAlarm';
+                        else if (key === 'DoorAlarm') baseKey = 'DoorAlarm';
+                        else if (key === 'TamperAlarm') baseKey = 'TamperAlarm';
+                        else if (key === 'CloseProximityAlarm') baseKey = 'CloseProximityAlarm';
+                        else if (key === 'UserSwitchAlarm') baseKey = 'UserSwitchAlarm';
+                        else if (key === 'DisinfectAlarm') baseKey = 'DisinfectAlarm';
+                        else if (key === 'OilAlarm') baseKey = 'OilAlarm';
+                        values[baseKey] = val.value;
+                    } else if (val.high !== undefined || val.low !== undefined) {
+                        // Handle alarm objects with high/low
+                        let baseKey = key.replace(/Alarm$/, '');
+                        if (key === 'TempAlarm') {
+                            values['TempAlarm_High'] = val.high;
+                            values['TempAlarm_Low'] = val.low;
+                        } else if (key === 'AverageTempAlarm') {
+                            values['AverageTempAlarm_High'] = val.high;
+                            values['AverageTempAlarm_Low'] = val.low;
+                        } else {
+                            if (val.high !== undefined) values[fullKey + '_high'] = val.high;
+                            if (val.low !== undefined) values[fullKey + '_low'] = val.low;
+                        }
+                    } else if (key === 'DoorReport' || key === 'TamperReport' || key === 'PresenceReport') {
+                        // These reports have boolean values
+                        if (val.value !== undefined && typeof val.value === 'boolean') {
+                            let baseKey = key.replace(/Report$/, '');
+                            values[baseKey] = val.value;
+                        }
                     } else {
+                        // Recursively extract from nested objects
                         Object.assign(values, extractBinaryValues(val, fullKey));
                     }
                 }
@@ -410,7 +592,6 @@
             return values;
         }
 
-        // Extract RSSI/SNR from message data
         function extractSignalData(message) {
             const signal = {};
             const data = message.original && message.original.data;
@@ -423,13 +604,41 @@
             return signal;
         }
 
-        // Build chart data from messages
-        function buildChartData(messages, fieldName, extractor) {
+        // Extract unit for a field from decoded data
+        function getFieldUnit(decoded, fieldName) {
+            decoded = normalizeDecoded(decoded);
+            if (!decoded || typeof decoded !== 'object') return '';
+            
+            // Map normalized field names back to report names
+            const reportMap = {
+                'Battery': 'BatteryReport',
+                'Temperature': 'TempReport',
+                'Humidity': 'HumidityReport',
+                'Lux': 'LuxReport',
+                'Flood': 'FloodReport',
+                'AverageTemperature': 'AverageTempReport'
+            };
+            
+            const reportName = reportMap[fieldName] || fieldName + 'Report';
+            if (decoded[reportName] && decoded[reportName].unit) {
+                return decoded[reportName].unit;
+            }
+            
+            // Try direct lookup
+            if (decoded[fieldName] && decoded[fieldName].unit) {
+                return decoded[fieldName].unit;
+            }
+            
+            return '';
+        }
+
+        function buildChartData(messages, fieldName, extractor, unitExtractor = null) {
             const data = [];
             const labels = [];
-            const maxPoints = 100; // Limit to last 100 points for performance
+            const maxPoints = 100;
+            let unit = '';
 
-            const sorted = messages.slice(0, maxPoints).reverse(); // Oldest first for chart
+            const sorted = messages.slice(0, maxPoints).reverse();
             sorted.forEach(msg => {
                 const timestamp = new Date(msg.time);
                 const values = extractor(msg.decoded || {});
@@ -438,74 +647,65 @@
                 if (value !== undefined && value !== null) {
                     labels.push(timestamp.toLocaleTimeString());
                     data.push(value);
+                    // Extract unit from first message that has this field
+                    if (!unit && unitExtractor) {
+                        unit = unitExtractor(msg.decoded || {}, fieldName);
+                    }
                 }
             });
 
-            return { labels, data };
+            return { labels, data, unit };
         }
 
-        // Get color scheme for field type
         function getFieldColorScheme(fieldName) {
             const fieldLower = fieldName.toLowerCase();
             if (fieldLower.includes('temp') || fieldLower.includes('temperature')) {
-                return {
-                    borderColor: 'rgb(244, 67, 54)',
-                    backgroundColor: 'rgba(244, 67, 54, 0.1)'
-                };
+                return { borderColor: 'rgb(244, 67, 54)', backgroundColor: 'rgba(244, 67, 54, 0.1)' };
             } else if (fieldLower.includes('humidity') || fieldLower.includes('hum')) {
-                return {
-                    borderColor: 'rgb(33, 150, 243)',
-                    backgroundColor: 'rgba(33, 150, 243, 0.1)'
-                };
+                return { borderColor: 'rgb(33, 150, 243)', backgroundColor: 'rgba(33, 150, 243, 0.1)' };
             } else if (fieldLower.includes('battery') || fieldLower.includes('voltage')) {
-                return {
-                    borderColor: 'rgb(255, 152, 0)',
-                    backgroundColor: 'rgba(255, 152, 0, 0.1)'
-                };
+                return { borderColor: 'rgb(255, 152, 0)', backgroundColor: 'rgba(255, 152, 0, 0.1)' };
             } else if (fieldLower.includes('rssi') || fieldLower.includes('snr')) {
-                return {
-                    borderColor: 'rgb(76, 175, 80)',
-                    backgroundColor: 'rgba(76, 175, 80, 0.1)'
-                };
+                return { borderColor: 'rgb(76, 175, 80)', backgroundColor: 'rgba(76, 175, 80, 0.1)' };
             } else if (fieldLower.includes('angle') || fieldLower.includes('tilt')) {
-                return {
-                    borderColor: 'rgb(156, 39, 176)',
-                    backgroundColor: 'rgba(156, 39, 176, 0.1)'
-                };
+                return { borderColor: 'rgb(156, 39, 176)', backgroundColor: 'rgba(156, 39, 176, 0.1)' };
             } else if (fieldLower.includes('distance') || fieldLower.includes('level')) {
-                return {
-                    borderColor: 'rgb(0, 188, 212)',
-                    backgroundColor: 'rgba(0, 188, 212, 0.1)'
-                };
+                return { borderColor: 'rgb(0, 188, 212)', backgroundColor: 'rgba(0, 188, 212, 0.1)' };
             } else if (fieldLower.includes('lux') || fieldLower.includes('light')) {
-                return {
-                    borderColor: 'rgb(255, 235, 59)',
-                    backgroundColor: 'rgba(255, 235, 59, 0.1)'
-                };
+                return { borderColor: 'rgb(255, 235, 59)', backgroundColor: 'rgba(255, 235, 59, 0.1)' };
             } else {
-                return {
-                    borderColor: 'rgb(0, 57, 77)',
-                    backgroundColor: 'rgba(0, 57, 77, 0.1)'
-                };
+                return { borderColor: 'rgb(0, 57, 77)', backgroundColor: 'rgba(0, 57, 77, 0.1)' };
             }
         }
 
-        // Create a line chart with appropriate colors
         function createLineChart(canvasId, title, fieldName, messages, extractor, unit = '') {
             const ctx = document.getElementById(canvasId);
             if (!ctx) return null;
 
-            const chartData = buildChartData(messages, fieldName, extractor);
+            // Destroy existing chart if present
+            if (currentCharts[canvasId]) {
+                currentCharts[canvasId].destroy();
+            }
+
+            // Try to extract unit from messages if not provided
+            if (!unit && messages.length > 0) {
+                unit = getFieldUnit(messages[0].decoded || {}, fieldName);
+            }
+
+            const chartData = buildChartData(messages, fieldName, extractor, getFieldUnit);
             if (chartData.data.length === 0) return null;
+
+            // Use extracted unit if available
+            const displayUnit = chartData.unit || unit;
 
             const colors = getFieldColorScheme(fieldName);
 
-            return new Chart(ctx, {
+            const chart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: chartData.labels,
                     datasets: [{
-                        label: `${title}${unit ? ` (${unit})` : ''}`,
+                        label: `${title}${displayUnit ? ` (${displayUnit})` : ''}`,
                         data: chartData.data,
                         borderColor: colors.borderColor,
                         backgroundColor: colors.backgroundColor,
@@ -522,9 +722,9 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: title,
+                            text: `${title}${displayUnit ? ` (${displayUnit})` : ''}`,
                             font: { size: 16, weight: 'bold' },
-                            color: '#00394d'
+                            color: '#333'
                         },
                         legend: {
                             display: true,
@@ -534,43 +734,244 @@
                     scales: {
                         y: {
                             beginAtZero: false,
-                            grid: {
-                                color: 'rgba(0,0,0,0.05)'
-                            }
+                            grid: { color: 'rgba(0,0,0,0.05)' }
                         },
                         x: {
-                            grid: {
-                                display: false
-                            }
+                            grid: { display: false }
                         }
                     }
                 }
             });
+
+            currentCharts[canvasId] = chart;
+            return chart;
         }
 
-        // Render sensor dashboard
+        function createMovementChart(canvasId, messages) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return null;
+
+            if (currentCharts[canvasId]) {
+                currentCharts[canvasId].destroy();
+            }
+
+            const data = { start: [], stop: [] };
+            const labels = [];
+            let totalStartCount = 0;
+            let totalStopCount = 0;
+            const maxPoints = 100;
+
+            const sorted = messages.slice(0, maxPoints).reverse();
+            sorted.forEach(msg => {
+                const timestamp = new Date(msg.time);
+                const decoded = normalizeDecoded(msg.decoded || {});
+                const eventType = msg.eventType || '';
+                const binary = extractBinaryValues(decoded);
+                
+                labels.push(timestamp.toLocaleTimeString());
+                
+                // Check for movement start/stop in various formats
+                let isStart = false;
+                let isStop = false;
+                
+                // Check event type
+                if (eventType.toLowerCase().includes('start') || eventType.toLowerCase().includes('movement start')) {
+                    isStart = true;
+                } else if (eventType.toLowerCase().includes('stop') || eventType.toLowerCase().includes('movement stop') || 
+                          eventType.toLowerCase().includes('stopped')) {
+                    isStop = true;
+                }
+                
+                // Check decoded fields - including RadioBridge abm_event
+                if (!isStart && !isStop) {
+                    // Check RadioBridge abm_event field
+                    if (decoded.abm_event) {
+                        const abmEvent = String(decoded.abm_event).toLowerCase();
+                        if (abmEvent.includes('movement_start') || abmEvent.includes('start')) {
+                            isStart = true;
+                        } else if (abmEvent.includes('movement_stop') || abmEvent.includes('stop')) {
+                            isStop = true;
+                        }
+                    }
+                    // Check other movement fields
+                    if (!isStart && !isStop) {
+                        if (decoded.movement === 'start' || decoded.movementStart === true || 
+                            decoded.MovementStart === true || decoded.motion === 'start' ||
+                            decoded.MotionStart === true) {
+                            isStart = true;
+                        } else if (decoded.movement === 'stop' || decoded.movementStop === true ||
+                                  decoded.MovementStop === true || decoded.motion === 'stop' ||
+                                  decoded.MotionStop === true || decoded.movement === 'stopped') {
+                            isStop = true;
+                        }
+                    }
+                }
+                
+                // Check binary fields
+                if (!isStart && !isStop) {
+                    if (binary.movement === true || binary.motion === true) {
+                        // If it's a boolean true, check if there's a separate start/stop indicator
+                        if (decoded.movementStart !== undefined || decoded.MovementStart !== undefined) {
+                            isStart = true;
+                        } else if (decoded.movementStop !== undefined || decoded.MovementStop !== undefined) {
+                            isStop = true;
+                        } else {
+                            // Default to start if movement is true
+                            isStart = true;
+                        }
+                    } else if (binary.movement === false) {
+                        isStop = true;
+                    }
+                }
+                
+                if (isStart) {
+                    data.start.push(1);
+                    data.stop.push(null);
+                    totalStartCount++;
+                } else if (isStop) {
+                    data.start.push(null);
+                    data.stop.push(1);
+                    totalStopCount++;
+                } else {
+                    data.start.push(null);
+                    data.stop.push(null);
+                }
+            });
+
+            if (data.start.filter(v => v !== null).length === 0 && data.stop.filter(v => v !== null).length === 0) {
+                return null;
+            }
+            
+            const totalEvents = totalStartCount + totalStopCount;
+
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Movement Start',
+                        data: data.start,
+                        borderColor: 'rgb(76, 175, 80)',
+                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        spanGaps: true
+                    }, {
+                        label: 'Movement Stop',
+                        data: data.stop,
+                        borderColor: 'rgb(244, 67, 54)',
+                        backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        spanGaps: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Movement Events (Total: ${totalEvents} - Start: ${totalStartCount}, Stop: ${totalStopCount})`,
+                            font: { size: 16, weight: 'bold' },
+                            color: '#333'
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return context[0].label;
+                                },
+                                label: function(context) {
+                                    if (context.datasetIndex === 0 && context.parsed.y === 1) {
+                                        return 'Movement Start';
+                                    } else if (context.datasetIndex === 1 && context.parsed.y === 1) {
+                                        return 'Movement Stop';
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1.2,
+                            ticks: {
+                                stepSize: 1,
+                                callback: function(value) {
+                                    return value === 1 ? 'Event' : '';
+                                }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+
+            currentCharts[canvasId] = chart;
+            return chart;
+        }
+
         async function renderSensorDashboard(deveui) {
+            currentDevEUI = deveui;
             const messages = await getSensorMessages(deveui);
             if (messages.length === 0) {
                 document.getElementById('sensorContent').innerHTML = '<div class="no-data">No data available for this sensor</div>';
                 return;
             }
 
-            // Re-decode messages with current decoder selection
+            // Destroy all existing charts
+            Object.values(currentCharts).forEach(chart => chart.destroy());
+            currentCharts = {};
+
             const decoderMap = JSON.parse(localStorage.getItem('rbt_decoder_map_by_deveui') || '{}');
             const defaultDecoderId = localStorage.getItem('rbt_default_decoder_id') || 'auto';
             const decoderId = decoderMap[deveui] || defaultDecoderId;
 
-            // Collect all numeric and binary values across messages
-            const numericFields = new Set();
+            const numericFields = new Map(); // Use Map to prevent duplicates
             const binaryFields = new Set();
             const signalData = [];
+            let batteryLevel = null;
+            let processedCount = 0;
+            let skippedCount = 0;
 
-            messages.forEach(msg => {
-                // Use cached decoded result, or re-decode if needed
-                let decoded = msg.decoded || {};
+            console.log(`Processing ${messages.length} messages for sensor ${deveui}`);
+            
+            messages.forEach((msg, msgIdx) => {
+                // Skip non-uplink messages (downlink_ack, etc.)
+                // But check both msg.original.data.event and msg.eventType
+                const originalEvent = msg.original && msg.original.data ? msg.original.data.event : null;
+                const msgEventType = msg.eventType || '';
                 
-                // If decoded is empty or just has error, try to re-decode
+                if ((originalEvent && (originalEvent === 'downlink_ack' || originalEvent === 'downlink_sent' || originalEvent === 'join')) ||
+                    (msgEventType === 'downlink_ack' || msgEventType === 'downlink_sent' || msgEventType === 'join')) {
+                    skippedCount++;
+                    if (msgIdx < 3) {
+                        console.log(`Message ${msgIdx}: Skipping ${originalEvent || msgEventType} event`);
+                    }
+                    return; // Skip these message types
+                }
+                
+                // Handle decoded field - it might be a JSON string or already an object
+                let decoded = msg.decoded || {};
+                if (typeof decoded === 'string') {
+                    try {
+                        decoded = JSON.parse(decoded);
+                    } catch (e) {
+                        console.warn('Failed to parse decoded field:', e);
+                        decoded = {};
+                    }
+                }
+                
                 if (!decoded || Object.keys(decoded).length === 0 || decoded.error) {
                     try {
                         if (window.RBTDecoders) {
@@ -592,21 +993,275 @@
                     }
                 }
 
-                const numeric = extractNumericValues(decoded);
-                const binary = extractBinaryValues(decoded);
-                const signal = extractSignalData(msg);
+                // Skip messages that are clearly not sensor data
+                // RadioBridge downlink_ack messages have these fields
+                if (decoded.event === 'downlink_ack' || decoded.downlink_ack_event || 
+                    decoded.packet_count !== undefined || decoded.protocol_version !== undefined) {
+                    // This is a RadioBridge message, not Sensative Strips
+                    // If Sensative Strips decoder was manually selected but message is RadioBridge, skip it
+                    if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                        return; // Skip RadioBridge messages when Sensative decoder is selected
+                    }
+                }
+                
+                // Normalize first to check the actual content
+                const normalizedForCheck = normalizeDecoded(decoded);
+                
+                // Skip Sensative Strips settings messages that only have "kind" and "note" (port 11)
+                // But only if they don't have any actual sensor report data
+                if ((decoded.port === 11 || normalizedForCheck.kind !== undefined) && 
+                    normalizedForCheck.note && 
+                    !normalizedForCheck.BatteryReport && !normalizedForCheck.TempReport && 
+                    !normalizedForCheck.HumidityReport && !normalizedForCheck.FloodReport && 
+                    !normalizedForCheck.LuxReport && !normalizedForCheck.LuxReport2 &&
+                    !normalizedForCheck.TempHumReport && !normalizedForCheck.AvgTempHumReport && 
+                    !normalizedForCheck.TempDoorReport) {
+                    // This is a settings message without sensor data, skip it
+                    console.log('Skipping settings message (port 11) without sensor data');
+                    return;
+                }
+                
+                // If Sensative Strips decoder is selected, verify the message actually contains Sensative Strips data
+                // But don't skip if it has the port + decoded array structure (that will be normalized)
+                if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                    // Check if decoded has Sensative Strips structure (port + decoded array, or direct report fields)
+                    const hasStripsStructure = (decoded.port !== undefined && Array.isArray(decoded.decoded)) ||
+                        normalizedForCheck.BatteryReport || normalizedForCheck.TempReport || normalizedForCheck.HumidityReport ||
+                        normalizedForCheck.FloodReport || normalizedForCheck.LuxReport || normalizedForCheck.LuxReport2 ||
+                        normalizedForCheck.TempHumReport || normalizedForCheck.AvgTempHumReport || normalizedForCheck.TempDoorReport ||
+                        normalizedForCheck.AverageTempReport || normalizedForCheck.CapacitanceFloodReport;
+                    
+                    // If it has port + decoded array structure, it's likely a valid Sensative Strips message
+                    // Don't skip it - let it be normalized and checked later
+                    if (decoded.port !== undefined && Array.isArray(decoded.decoded)) {
+                        // This is a valid Sensative Strips structure, continue processing
+                        console.log('Found Sensative Strips structure with port + decoded array, port:', decoded.port);
+                    } else if (!hasStripsStructure && (decoded.packet_count !== undefined || decoded.protocol_version !== undefined)) {
+                        // This is a RadioBridge message incorrectly decoded with Sensative Strips decoder
+                        console.log('Skipping RadioBridge message incorrectly decoded with Sensative Strips decoder');
+                        return;
+                    }
+                }
 
-                Object.keys(numeric).forEach(k => numericFields.add(k));
+                // Debug: log raw decoded structure for Sensative Strips
+                if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                    console.log('Raw decoded structure:', JSON.stringify(decoded, null, 2));
+                    console.log('Decoded type:', typeof decoded, 'Is array?', Array.isArray(decoded));
+                }
+
+                // Normalize decoded structure before extraction
+                const normalizedDecoded = normalizeDecoded(decoded);
+                
+                // Debug: log normalized structure
+                if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                    console.log('Normalized decoded structure:', JSON.stringify(normalizedDecoded, null, 2));
+                    console.log('Has BatteryReport?', !!normalizedDecoded.BatteryReport);
+                    console.log('Has TempReport?', !!normalizedDecoded.TempReport);
+                    console.log('Has FloodReport?', !!normalizedDecoded.FloodReport);
+                }
+                
+                // Skip if normalized decoded doesn't have any sensor report fields
+                // Check for Sensative Strips reports, RadioBridge fields, or movement events
+                const hasAbmEvent = normalizedDecoded && normalizedDecoded.abm_event !== undefined;
+                const hasAccelerationEvent = normalizedDecoded && normalizedDecoded.event === 'acceleration';
+                const hasMovementInEvent = normalizedDecoded && normalizedDecoded.event && 
+                    (String(normalizedDecoded.event).includes('movement') || 
+                     String(normalizedDecoded.event).includes('start') || 
+                     String(normalizedDecoded.event).includes('stop'));
+                
+                // Check for Sensative Strips report fields (these are the main sensor data)
+                // Check both before and after normalization to catch all cases
+                const hasStripsReportsInDecoded = decoded && (
+                    decoded.BatteryReport || decoded.TempReport || 
+                    decoded.HumidityReport || decoded.FloodReport ||
+                    decoded.LuxReport || decoded.LuxReport2 ||
+                    decoded.TempHumReport || decoded.AvgTempHumReport ||
+                    decoded.TempDoorReport || decoded.AverageTempReport ||
+                    decoded.CapacitanceFloodReport || decoded.CapacitancePadReport ||
+                    decoded.CapacitanceEndReport || decoded.DoorCountReport ||
+                    decoded.IRProximityReport || decoded.IRCloseProximityReport
+                );
+                const hasStripsReportsInNormalized = normalizedDecoded && (
+                    normalizedDecoded.BatteryReport || normalizedDecoded.TempReport || 
+                    normalizedDecoded.HumidityReport || normalizedDecoded.FloodReport ||
+                    normalizedDecoded.LuxReport || normalizedDecoded.LuxReport2 ||
+                    normalizedDecoded.TempHumReport || normalizedDecoded.AvgTempHumReport ||
+                    normalizedDecoded.TempDoorReport || normalizedDecoded.AverageTempReport ||
+                    normalizedDecoded.CapacitanceFloodReport || normalizedDecoded.CapacitancePadReport ||
+                    normalizedDecoded.CapacitanceEndReport || normalizedDecoded.DoorCountReport ||
+                    normalizedDecoded.IRProximityReport || normalizedDecoded.IRCloseProximityReport
+                );
+                const hasStripsReports = hasStripsReportsInDecoded || hasStripsReportsInNormalized;
+                
+                // Check for RadioBridge fields - including temperature event fields
+                const hasRadioBridgeFields = normalizedDecoded && (
+                    normalizedDecoded.temperature !== undefined || 
+                    normalizedDecoded.temperature_c !== undefined ||
+                    normalizedDecoded.relative_temperature !== undefined ||
+                    normalizedDecoded.temperature_event !== undefined ||
+                    normalizedDecoded.battery !== undefined ||
+                    normalizedDecoded.battery_level !== undefined || 
+                    normalizedDecoded.humidity !== undefined ||
+                    normalizedDecoded.rssi !== undefined
+                );
+                
+                // Check for movement events
+                const hasMovementEvent = hasAbmEvent || hasAccelerationEvent || hasMovementInEvent;
+                
+                // Check for any other graphable numeric values (but exclude metadata)
+                const hasOtherGraphableData = normalizedDecoded && Object.keys(normalizedDecoded).some(key => {
+                    const keyLower = key.toLowerCase();
+                    if (EXCLUDED_FIELDS.has(keyLower) || 
+                        keyLower === 'historystart' || keyLower === 'historyposition' ||
+                        keyLower.includes('historycount') || 
+                        keyLower.includes('subband') || keyLower.includes('sub_band') ||
+                        (keyLower.includes('accumulation') && keyLower.includes('count'))) {
+                        return false;
+                    }
+                    const val = normalizedDecoded[key];
+                    return (typeof val === 'number' && key !== 'packet_count' && key !== 'protocol_version' && key !== 'payload_len') ||
+                           (typeof val === 'object' && val !== null && val.value !== undefined);
+                });
+                
+                const finalHasSensorData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent || hasOtherGraphableData;
+                
+                // Debug movement event detection
+                if (hasMovementEvent) {
+                    console.log(`Message ${msgIdx}: Movement event detected - abm_event: ${normalizedDecoded?.abm_event}, event: ${normalizedDecoded?.event}`);
+                    console.log(`  hasAbmEvent: ${hasAbmEvent}, hasAccelerationEvent: ${hasAccelerationEvent}, hasMovementInEvent: ${hasMovementInEvent}`);
+                }
+                
+                // Quick check for sensor data before extraction
+                // Include temperature event fields in the check
+                const quickCheckHasData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent ||
+                    (normalizedDecoded && Object.keys(normalizedDecoded).some(k => {
+                        const kLower = k.toLowerCase();
+                        // Check for temperature fields (including event fields)
+                        if (kLower.includes('temperature') || kLower.includes('temp')) {
+                            return !EXCLUDED_FIELDS.has(kLower) &&
+                                   kLower !== 'historystart' && kLower !== 'historyposition';
+                        }
+                        return (k.includes('Report') || k.includes('Alarm')) &&
+                               !EXCLUDED_FIELDS.has(kLower) &&
+                               kLower !== 'historystart' && kLower !== 'historyposition';
+                    }));
+                
+                if (!quickCheckHasData) {
+                    skippedCount++;
+                    if (skippedCount <= 3 && msgIdx < 3) {
+                        console.log(`Skipping message ${msgIdx} - no sensor data found. Keys:`, Object.keys(normalizedDecoded || {}));
+                    }
+                    return; // Skip messages without sensor data
+                }
+                
+                // Extract numeric and binary values for messages that have sensor data
+                processedCount++;
+                const numeric = extractNumericValues(normalizedDecoded);
+                const binary = extractBinaryValues(normalizedDecoded);
+                const signal = extractSignalData(msg);
+                
+                if (hasMovementEvent) {
+                    console.log(`Message ${msgIdx}: Processing movement event message`);
+                }
+                if (msgIdx < 3) {
+                    console.log(`Message ${msgIdx} has sensor data, processing. Fields found:`, 
+                        Object.keys(normalizedDecoded).filter(k => 
+                            k.includes('Report') || k.includes('Alarm') || k.includes('abm_event') ||
+                            typeof normalizedDecoded[k] === 'number' ||
+                            (typeof normalizedDecoded[k] === 'object' && normalizedDecoded[k]?.value !== undefined)
+                        ));
+                    console.log(`  Extracted numeric fields:`, Object.keys(numeric));
+                    console.log(`  Extracted binary fields:`, Object.keys(binary));
+                }
+
+                // Store fields with their display names to prevent duplicates
+                // For Sensative Strips, we've already normalized the keys (BatteryReport -> Battery, etc.)
+                Object.keys(numeric).forEach(k => {
+                    const kLower = k.toLowerCase();
+                    // Skip RSSI and SNR - they're handled separately as signal quality charts
+                    if (kLower === 'rssi' || kLower === 'snr') {
+                        return;
+                    }
+                    // Double-check exclusion before adding to map - check all variations
+                    const isExcluded = EXCLUDED_FIELDS.has(kLower) || 
+                                     EXCLUDED_FIELDS.has(k) ||
+                                     k === 'historyStart' || kLower === 'historystart' || kLower === 'history_start' ||
+                                     k === 'historyPosition' || kLower === 'historyposition' || kLower === 'history_position' ||
+                                     kLower.includes('historycount') || kLower.includes('history_count') ||
+                                     kLower.includes('subband') || kLower.includes('sub_band') || kLower.includes('subbands') || kLower.includes('sub_bands') ||
+                                     (kLower.includes('accumulation') && kLower.includes('count'));
+                    
+                    if (isExcluded) {
+                        if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                            console.log(`[Strips] Excluding field from graphs: ${k} (isExcluded: ${isExcluded})`);
+                        }
+                        return;
+                    }
+                    // Use the key as-is since we've already normalized in extractNumericValues
+                    if (!numericFields.has(k)) {
+                        numericFields.set(k, k); // Map display name to itself
+                        if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                            console.log(`[Strips] Added numeric field to map: ${k} = ${numeric[k]}`);
+                        }
+                    }
+                });
                 Object.keys(binary).forEach(k => binaryFields.add(k));
+                
+                // Debug logging for Sensative Strips
+                if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                    if (msgIdx < 3) { // Only log first 3 messages to avoid spam
+                        console.log(`[Strips ${msgIdx}] Raw decoded:`, JSON.stringify(decoded, null, 2));
+                        console.log(`[Strips ${msgIdx}] Normalized decoded:`, JSON.stringify(normalizedDecoded, null, 2));
+                        console.log(`[Strips ${msgIdx}] Extracted numeric fields:`, Object.keys(numeric), 'Values:', numeric);
+                        console.log(`[Strips ${msgIdx}] Extracted binary fields:`, Object.keys(binary), 'Values:', binary);
+                    }
+                }
                 if (signal.rssi !== undefined || signal.snr !== undefined) {
                     signalData.push({ time: msg.time, ...signal });
                 }
                 
-                // Store decoded result back in msg for chart building
-                msg.decoded = decoded;
+                // Extract battery level (check both lowercase and capitalized versions)
+                // Use the latest (first in sorted array) battery value
+                if (batteryLevel === null) {
+                    if (numeric.Battery !== undefined) {
+                        batteryLevel = numeric.Battery;
+                        console.log('Battery level found (Battery):', batteryLevel);
+                    } else if (numeric.battery !== undefined) {
+                        batteryLevel = numeric.battery;
+                        console.log('Battery level found (battery):', batteryLevel);
+                    } else if (numeric.battery_level !== undefined) {
+                        // Check if this is RadioBridge (volts) or Sensative Strips (percentage)
+                        // RadioBridge sensors report voltage (0-3.4V), Sensative Strips report percentage (0-100%)
+                        const rawBattery = numeric.battery_level;
+                        // If battery is less than 10, it's likely voltage (RadioBridge), convert to percentage
+                        // Max voltage for RadioBridge is 3.4V = 100%
+                        if (rawBattery < 10 && rawBattery > 0) {
+                            batteryLevel = Math.round((rawBattery / 3.4) * 100);
+                            console.log(`Battery level converted from ${rawBattery}V to ${batteryLevel}% (RadioBridge)`);
+                        } else {
+                            batteryLevel = rawBattery;
+                            console.log('Battery level found (battery_level):', batteryLevel);
+                        }
+                    }
+                }
+                
+                // Store the normalized decoded result back in msg for chart building
+                // This ensures we have the properly normalized structure
+                msg.decoded = normalizedDecoded;
             });
+            
+            console.log(`Message processing summary: ${processedCount} processed, ${skippedCount} skipped, ${numericFields.size} numeric fields found, ${binaryFields.size} binary fields found`);
+            if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                console.log(`[Strips] Numeric fields in map:`, Array.from(numericFields.keys()));
+                console.log(`[Strips] Binary fields in set:`, Array.from(binaryFields));
+                if (processedCount === 0) {
+                    console.warn(`[Strips] WARNING: No messages were processed! All ${messages.length} messages were skipped.`);
+                    console.warn(`[Strips] This usually means all messages are downlink_ack or settings messages.`);
+                    console.warn(`[Strips] You need actual sensor data uplink messages (port 1 with BatteryReport, TempReport, etc.)`);
+                }
+            }
 
-            // Build HTML
+            // Build HTML - Status indicators FIRST
             let html = `<div class="sensor-card">
                 <div class="sensor-header">
                     <h3>Sensor: ${deveui}</h3>
@@ -623,36 +1278,14 @@
                     </div>
                 </div>`;
 
-            // Add signal quality charts
-            if (signalData.length > 0) {
-                html += `<h4 style="margin-top: 20px; color: #00394d;">Signal Quality</h4>`;
-                if (signalData.some(s => s.rssi !== undefined)) {
-                    html += `<div class="chart-container small"><canvas id="chart_rssi_${deveui}"></canvas></div>`;
-                }
-                if (signalData.some(s => s.snr !== undefined)) {
-                    html += `<div class="chart-container small"><canvas id="chart_snr_${deveui}"></canvas></div>`;
-                }
-            }
+            // Status Indicators Section (AT THE TOP)
+            html += `<h4 style="margin-top: 20px; color: #333; font-weight: 600;">Status Indicators</h4>`;
+            html += `<div class="status-indicator-grid">`;
 
-            // Add numeric value charts
-            if (numericFields.size > 0) {
-                html += `<h4 style="margin-top: 20px; color: #00394d;">Numeric Values</h4>`;
-                numericFields.forEach(field => {
-                    const chartId = `chart_${field}_${deveui}`.replace(/[^a-zA-Z0-9_]/g, '_');
-                    html += `<div class="chart-container"><canvas id="${chartId}"></canvas></div>`;
-                });
-            }
-
-            // Add binary status indicators with light bulbs
-            if (binaryFields.size > 0) {
-                html += `<h4 style="margin-top: 20px; color: #00394d;">Status Indicators</h4>`;
-                html += `<div class="status-indicator-grid">`;
-                
-                // Get latest binary values
+            // Battery indicator - get from latest message if not found in loop
+            if (batteryLevel === null) {
                 const latestMsg = messages[0];
-                let latestDecoded = latestMsg.decoded || {};
-                
-                // Re-decode if needed
+                let latestDecoded = normalizeDecoded(latestMsg.decoded || {});
                 if (!latestDecoded || Object.keys(latestDecoded).length === 0) {
                     try {
                         if (window.RBTDecoders) {
@@ -665,68 +1298,343 @@
                             if (!decoder) decoder = window.RBTDecoders.getDecoder('raw');
                             if (decoder) {
                                 const out = decoder.decode(latestMsg.original);
-                                latestDecoded = window.RBTDecoders.normalizeDecodedOutput(out).decoded || {};
+                                latestDecoded = normalizeDecoded(window.RBTDecoders.normalizeDecodedOutput(out).decoded || {});
                             }
                         }
                     } catch (e) {
                         console.warn('Decode error:', e);
                     }
                 }
-
-                const latestBinary = extractBinaryValues(latestDecoded);
-                binaryFields.forEach(field => {
-                    const value = latestBinary[field];
-                    if (value !== undefined) {
-                        const displayValue = String(value);
-                        const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        
-                        // Determine light state
-                        let lightClass = 'off';
-                        let statusText = displayValue;
-                        const lower = displayValue.toLowerCase();
-                        
-                        if (lower === 'true' || lower === 'on' || lower === 'yes' || 
-                            lower.includes('present') || lower.includes('connected') ||
-                            lower.includes('active') || lower.includes('start')) {
-                            lightClass = 'on';
-                            statusText = 'ON';
-                        } else if (lower === 'false' || lower === 'off' || lower === 'no' ||
-                                   lower.includes('not present') || lower.includes('disconnected') ||
-                                   lower.includes('inactive') || lower.includes('stop') || lower.includes('stopped')) {
-                            lightClass = 'off';
-                            statusText = 'OFF';
-                        } else if (lower.includes('open')) {
-                            lightClass = 'open';
-                            statusText = 'OPEN';
-                        } else if (lower.includes('closed')) {
-                            lightClass = 'closed';
-                            statusText = 'CLOSED';
-                        }
-                        
-                        html += `<div class="status-light-card">
-                            <div class="status-light-label">${fieldLabel}</div>
-                            <div class="status-light ${lightClass}"></div>
-                            <div class="status-light-value">${statusText}</div>
-                        </div>`;
+                const latestNumeric = extractNumericValues(latestDecoded);
+                if (latestNumeric.Battery !== undefined) {
+                    batteryLevel = latestNumeric.Battery;
+                } else if (latestNumeric.battery !== undefined) {
+                    batteryLevel = latestNumeric.battery;
+                } else if (latestNumeric.battery_level !== undefined) {
+                    // Check if this is RadioBridge (volts) or Sensative Strips (percentage)
+                    const rawBattery = latestNumeric.battery_level;
+                    // If battery is less than 10, it's likely voltage (RadioBridge), convert to percentage
+                    // Max voltage for RadioBridge is 3.4V = 100%
+                    if (rawBattery < 10 && rawBattery > 0) {
+                        batteryLevel = Math.round((rawBattery / 3.4) * 100);
+                        console.log(`Battery level converted from ${rawBattery}V to ${batteryLevel}% (RadioBridge)`);
+                    } else {
+                        batteryLevel = rawBattery;
                     }
+                }
+            }
+            
+            // Battery indicator
+            if (batteryLevel !== null && batteryLevel !== undefined) {
+                html += `<div class="battery-indicator">
+                    <div class="battery-icon" style="--battery-level: ${batteryLevel}%"></div>
+                    <div class="battery-text">${batteryLevel}%</div>
+                </div>`;
+            }
+
+            // Get latest binary values
+            const latestMsg = messages[0];
+            let latestDecoded = normalizeDecoded(latestMsg.decoded || {});
+            
+            if (!latestDecoded || Object.keys(latestDecoded).length === 0) {
+                try {
+                    if (window.RBTDecoders) {
+                        let decoder = null;
+                        if (!decoderId || decoderId === 'auto') {
+                            decoder = window.RBTDecoders.pickAutoDecoder(latestMsg.original);
+                        } else {
+                            decoder = window.RBTDecoders.getDecoder(decoderId);
+                        }
+                        if (!decoder) decoder = window.RBTDecoders.getDecoder('raw');
+                        if (decoder) {
+                            const out = decoder.decode(latestMsg.original);
+                            latestDecoded = normalizeDecoded(window.RBTDecoders.normalizeDecodedOutput(out).decoded || {});
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Decode error:', e);
+                }
+            }
+
+            const latestBinary = extractBinaryValues(latestDecoded);
+            binaryFields.forEach(field => {
+                const value = latestBinary[field];
+                if (value !== undefined) {
+                    const displayValue = String(value);
+                    const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    
+                    let lightClass = 'off';
+                    let statusText = displayValue;
+                    const lower = displayValue.toLowerCase();
+                    
+                    if (lower === 'true' || lower === 'on' || lower === 'yes' || 
+                        lower.includes('present') || lower.includes('connected') ||
+                        lower.includes('active') || lower.includes('start')) {
+                        lightClass = 'on';
+                        statusText = 'ON';
+                    } else if (lower === 'false' || lower === 'off' || lower === 'no' ||
+                               lower.includes('not present') || lower.includes('disconnected') ||
+                               lower.includes('inactive') || lower.includes('stop') || lower.includes('stopped')) {
+                        lightClass = 'off';
+                        statusText = 'OFF';
+                    } else if (lower.includes('open')) {
+                        lightClass = 'open';
+                        statusText = 'OPEN';
+                    } else if (lower.includes('closed')) {
+                        lightClass = 'closed';
+                        statusText = 'CLOSED';
+                    }
+                    
+                    html += `<div class="status-light-card">
+                        <div class="status-light-label">${fieldLabel}</div>
+                        <div class="status-light ${lightClass}"></div>
+                        <div class="status-light-value">${statusText}</div>
+                    </div>`;
+                }
+            });
+            html += `</div>`;
+
+            // Check for movement events - look for various movement-related fields
+            let movementFoundIn = [];
+            const hasMovement = messages.some((msg, idx) => {
+                const eventType = msg.eventType || '';
+                const decoded = normalizeDecoded(msg.decoded || {});
+                let found = false;
+                let reason = '';
+                
+                // Check for RadioBridge ABM (Acceleration-Based Motion) events
+                if (decoded.abm_event !== undefined) {
+                    const abmEvent = String(decoded.abm_event).toLowerCase();
+                    if (abmEvent.includes('movement_start') || abmEvent.includes('movement_stop') ||
+                        abmEvent.includes('start') || abmEvent.includes('stop')) {
+                        found = true;
+                        reason = `abm_event: "${decoded.abm_event}"`;
+                    }
+                }
+                
+                // Check event type
+                if (!found && (eventType.toLowerCase().includes('movement') || 
+                    eventType.toLowerCase().includes('start') ||
+                    eventType.toLowerCase().includes('stop') ||
+                    eventType.toLowerCase().includes('acceleration'))) {
+                    found = true;
+                    reason = `eventType: "${eventType}"`;
+                }
+                
+                // Check decoded event field
+                if (!found && decoded.event) {
+                    const event = String(decoded.event).toLowerCase();
+                    if (event.includes('movement') || event.includes('start') || 
+                        event.includes('stop') || event.includes('acceleration')) {
+                        found = true;
+                        reason = `decoded.event: "${decoded.event}"`;
+                    }
+                }
+                
+                // Check for movement fields in decoded data
+                if (!found) {
+                    if (decoded.movement !== undefined ||
+                        decoded.movementStart !== undefined ||
+                        decoded.movementStop !== undefined ||
+                        decoded.MovementStart !== undefined ||
+                        decoded.MovementStop !== undefined ||
+                        decoded.motion !== undefined ||
+                        decoded.MotionStart !== undefined ||
+                        decoded.MotionStop !== undefined) {
+                        found = true;
+                        reason = 'decoded movement fields';
+                    }
+                }
+                // Check binary fields for movement
+                if (!found) {
+                    const binary = extractBinaryValues(decoded);
+                    if (binary.movement !== undefined || binary.motion !== undefined) {
+                        found = true;
+                        reason = 'binary movement fields';
+                    }
+                }
+                
+                if (found) {
+                    movementFoundIn.push(`Message ${idx}: ${reason}`);
+                }
+                return found;
+            });
+            
+            console.log('Movement detection:', hasMovement ? `Found in: ${movementFoundIn.join(', ')}` : 'No movement events found');
+
+            // Graphs Section (GROUPED)
+            html += `<div class="chart-group">`;
+            html += `<div class="chart-group-title">Sensor Data</div>`;
+
+            // Movement chart (if applicable) - FIRST
+            if (hasMovement) {
+                html += `<div class="chart-container"><canvas id="chart_movement_${deveui}"></canvas></div>`;
+            }
+
+            // Numeric value charts (sensor data) - BEFORE signal quality
+            // Sort fields: Temperature first for Sensative Strips, then others
+            const sortedFields = Array.from(numericFields.entries());
+            if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                // Sort to put Temperature first
+                sortedFields.sort((a, b) => {
+                    const aKey = a[0].toLowerCase();
+                    const bKey = b[0].toLowerCase();
+                    if (aKey.includes('temp') && !bKey.includes('temp')) return -1;
+                    if (!aKey.includes('temp') && bKey.includes('temp')) return 1;
+                    return aKey.localeCompare(bKey);
                 });
-                html += `</div>`;
+            }
+            
+            sortedFields.forEach(([displayKey, originalKey]) => {
+                // Skip RSSI and SNR - they go at the end
+                if (displayKey.toLowerCase() === 'rssi' || displayKey.toLowerCase() === 'snr') {
+                    return;
+                }
+                const chartId = `chart_${displayKey}_${deveui}`.replace(/[^a-zA-Z0-9_]/g, '_');
+                html += `<div class="chart-container"><canvas id="${chartId}"></canvas></div>`;
+            });
+
+            // Signal quality charts (RSSI/SNR) - LAST
+            if (signalData.length > 0) {
+                if (signalData.some(s => s.rssi !== undefined)) {
+                    html += `<div class="chart-container small"><canvas id="chart_rssi_${deveui}"></canvas></div>`;
+                }
+                if (signalData.some(s => s.snr !== undefined)) {
+                    html += `<div class="chart-container small"><canvas id="chart_snr_${deveui}"></canvas></div>`;
+                }
             }
 
             html += `</div>`;
+            html += `</div>`;
+            
+            // Debug: Log what we're about to render
+            console.log(`Rendering dashboard: ${numericFields.size} numeric fields, ${binaryFields.size} binary fields, ${signalData.length} signal data points, hasMovement: ${hasMovement}`);
+            if (numericFields.size === 0 && signalData.length === 0 && !hasMovement) {
+                // Check if all messages were skipped due to being downlink_ack
+                const allDownlinkAck = messages.length > 0 && messages.every(msg => {
+                    const originalEvent = msg.original && msg.original.data ? msg.original.data.event : null;
+                    const msgEventType = msg.eventType || '';
+                    return (originalEvent === 'downlink_ack' || msgEventType === 'downlink_ack');
+                });
+                
+                let warningMsg = 'No graphable data found in messages.';
+                if (allDownlinkAck) {
+                    warningMsg = 'Only downlink acknowledgment messages found in cache. No sensor data uplink messages are available.';
+                } else if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                    const hasPort11Only = messages.every(msg => {
+                        const decoded = normalizeDecoded(msg.decoded || {});
+                        return decoded.port === 11 || decoded.kind !== undefined;
+                    });
+                    if (hasPort11Only) {
+                        warningMsg = 'Only settings messages (port 11) found. No sensor data uplink messages (port 1 with BatteryReport, TempReport, etc.) are available.';
+                    }
+                }
+                
+                html += `<div class="no-data" style="margin-top: 20px; padding: 20px; text-align: center; color: #666;">
+                    <p><strong>${warningMsg}</strong></p>
+                    <p style="font-size: 12px; margin-top: 10px;">Total messages in cache: ${messages.length}</p>
+                    <p style="font-size: 12px;">Processed: ${processedCount} messages, Skipped: ${skippedCount} messages</p>
+                    <p style="font-size: 12px; margin-top: 10px; color: #d32f2f;">
+                        <strong>Solution:</strong> Wait for new sensor data uplink messages to arrive, or check the Uplinks page to see if sensor data messages are being received and decoded correctly.
+                    </p>
+                </div>`;
+            }
+            
             document.getElementById('sensorContent').innerHTML = html;
 
             // Create charts after DOM is updated
             setTimeout(() => {
-                // Signal quality charts
+                try {
+                // Movement chart - FIRST
+                if (hasMovement) {
+                    createMovementChart(`chart_movement_${deveui}`, messages);
+                }
+
+                // Numeric value charts (sensor data) - BEFORE signal quality
+                // Sort fields: Temperature first for Sensative Strips, then others
+                const sortedFields = Array.from(numericFields.entries());
+                if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                    // Sort to put Temperature first
+                    sortedFields.sort((a, b) => {
+                        const aKey = a[0].toLowerCase();
+                        const bKey = b[0].toLowerCase();
+                        if (aKey.includes('temp') && !bKey.includes('temp')) return -1;
+                        if (!aKey.includes('temp') && bKey.includes('temp')) return 1;
+                        return aKey.localeCompare(bKey);
+                    });
+                }
+                
+                console.log('Creating charts for fields:', sortedFields.map(([k]) => k));
+                if (sortedFields.length === 0) {
+                    console.warn('No numeric fields found - no charts will be created. Check message processing above.');
+                    if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                        console.warn('[Strips] No numeric fields found! Check if messages are being processed correctly.');
+                    }
+                }
+                sortedFields.forEach(([displayKey, originalKey]) => {
+                    try {
+                        const chartId = `chart_${displayKey}_${deveui}`.replace(/[^a-zA-Z0-9_]/g, '_');
+                        const fieldTitle = displayKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        
+                        if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                            console.log(`[Strips] Processing field: ${displayKey}, chartId: ${chartId}`);
+                        }
+                        
+                        // Filter messages that have this field (use displayKey since that's what we normalized to)
+                        const filteredMessages = messages.filter(msg => {
+                            try {
+                                const numeric = extractNumericValues(msg.decoded || {});
+                                // Check displayKey first (normalized name), then originalKey as fallback
+                                const hasField = numeric[displayKey] !== undefined || numeric[originalKey] !== undefined;
+                                if (hasField && decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                                    console.log(`[Strips] Field ${displayKey} found in message, value:`, numeric[displayKey] || numeric[originalKey]);
+                                }
+                                return hasField;
+                            } catch (e) {
+                                console.warn('Error filtering messages for field:', displayKey, e);
+                                return false;
+                            }
+                        });
+                        if (filteredMessages.length > 0) {
+                            console.log(`Creating chart for ${displayKey} with ${filteredMessages.length} messages`);
+                            // Check if canvas element exists
+                            const canvasElement = document.getElementById(chartId);
+                            if (!canvasElement) {
+                                console.error(`[Strips] Canvas element not found for ${displayKey}! ID: ${chartId}`);
+                                console.error(`[Strips] Available canvas elements:`, Array.from(document.querySelectorAll('canvas')).map(c => c.id));
+                            }
+                            // Use displayKey for extraction since that's the normalized field name
+                            const chart = createLineChart(chartId, fieldTitle, displayKey, filteredMessages, extractNumericValues);
+                            if (!chart) {
+                                console.warn(`Failed to create chart for ${displayKey} - canvas element not found or chart creation failed`);
+                            } else {
+                                console.log(`Successfully created chart for ${displayKey}`);
+                                if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                                    console.log(`[Strips] ✓ Chart created for ${displayKey}`);
+                                }
+                            }
+                        } else {
+                            console.warn(`No messages with field ${displayKey} found`);
+                            if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                                console.warn(`[Strips] ✗ No messages with field ${displayKey} - check extraction logic`);
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`Error creating chart for ${displayKey}:`, e);
+                        if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
+                            console.error(`[Strips] Error creating chart for ${displayKey}:`, e);
+                        }
+                    }
+                });
+                
+                // Signal quality charts (RSSI/SNR) - LAST
                 if (signalData.length > 0) {
                     const rssiMessages = signalData
                         .filter(s => s.rssi !== undefined)
                         .map(s => ({ time: s.time, decoded: { rssi: s.rssi } }));
                     if (rssiMessages.length > 0) {
                         createLineChart(`chart_rssi_${deveui}`, 'RSSI', 'rssi', 
-                            rssiMessages,
-                            (decoded) => ({ rssi: decoded.rssi }), 'dBm');
+                            rssiMessages, (decoded) => ({ rssi: decoded.rssi }), 'dBm');
                     }
 
                     const snrMessages = signalData
@@ -734,28 +1642,17 @@
                         .map(s => ({ time: s.time, decoded: { snr: s.snr } }));
                     if (snrMessages.length > 0) {
                         createLineChart(`chart_snr_${deveui}`, 'SNR', 'snr',
-                            snrMessages,
-                            (decoded) => ({ snr: decoded.snr }), 'dB');
+                            snrMessages, (decoded) => ({ snr: decoded.snr }), 'dB');
                     }
                 }
-
-                // Numeric value charts - use messages with decoded data
-                numericFields.forEach(field => {
-                    const chartId = `chart_${field}_${deveui}`.replace(/[^a-zA-Z0-9_]/g, '_');
-                    const fieldTitle = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    // Filter messages that have this field
-                    const filteredMessages = messages.filter(msg => {
-                        const numeric = extractNumericValues(msg.decoded || {});
-                        return numeric[field] !== undefined;
-                    });
-                    if (filteredMessages.length > 0) {
-                        createLineChart(chartId, fieldTitle, field, filteredMessages, extractNumericValues);
-                    }
-                });
+                
+                console.log('Chart creation complete. Total charts:', Object.keys(currentCharts).length);
+            } catch (e) {
+                console.error('Error creating charts:', e);
+            }
             }, 100);
         }
 
-        // Populate sensor dropdown
         async function populateSensorList() {
             const sensors = await getSensorList();
             const select = document.getElementById('sensorSelect');
@@ -768,7 +1665,24 @@
             });
         }
 
-        // Initialize
+        function startAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            autoRefreshInterval = setInterval(() => {
+                if (currentDevEUI) {
+                    renderSensorDashboard(currentDevEUI);
+                }
+            }, 30000); // 30 seconds
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 await initDB();
@@ -778,14 +1692,34 @@
                     const deveui = this.value;
                     if (deveui) {
                         renderSensorDashboard(deveui);
+                        if (document.getElementById('autoRefresh').checked) {
+                            startAutoRefresh();
+                        }
                     } else {
+                        stopAutoRefresh();
                         document.getElementById('sensorContent').innerHTML = '<div class="no-data">Select a sensor to view its data</div>';
                     }
                 });
 
                 document.getElementById('refreshBtn').addEventListener('click', async () => {
                     await populateSensorList();
+                    if (currentDevEUI) {
+                        await renderSensorDashboard(currentDevEUI);
+                    }
                 });
+
+                document.getElementById('autoRefresh').addEventListener('change', function() {
+                    if (this.checked) {
+                        startAutoRefresh();
+                    } else {
+                        stopAutoRefresh();
+                    }
+                });
+
+                // Start auto-refresh if enabled
+                if (document.getElementById('autoRefresh').checked) {
+                    startAutoRefresh();
+                }
             } catch (e) {
                 console.error('Initialization error:', e);
                 document.getElementById('sensorContent').innerHTML = '<div class="no-data" style="color: red;">Error initializing: ' + e + '</div>';

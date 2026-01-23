@@ -21,25 +21,30 @@ a {
 }
 
 body {
-    font-family: 'PoppinsFont', Gotham, 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 13px;
-    line-height: 1.6em;
-    color: #00394d;
+    font-family: 'PoppinsFont', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5em;
+    color: #333333;
+    background-color: #f5f5f5;
+    margin: 0;
+    padding: 0;
 
     display: grid;
     grid-template-areas:
         'header header'
         'nav section'
     ;
-    grid-template-columns: 200px 6fr;
-    grid-template-rows: 90px 1fr;
+    grid-template-columns: 240px 1fr;
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
 }
 
 header {
     grid-area: header;
-    background-color: #f5f5f5;
-    height: 90px;
-    padding: 0px 20px;
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 15px 30px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 header .container {
@@ -60,9 +65,11 @@ header .container .my-logo img {
 }
 
 header .container .my-logo h1 {
-    margin-left: 10px;
-    font-size: 22px;
-    color: #00394d;
+    margin-left: 12px;
+    font-size: 20px;
+    font-weight: 600;
+    color: #2196f3;
+    letter-spacing: -0.3px;
 }
 
 nav {
@@ -70,7 +77,9 @@ nav {
     display: flex;
     flex-direction: column;
     background-color: #ffffff;
-    padding: 10px;
+    padding: 20px 0;
+    border-right: 1px solid #e0e0e0;
+    min-height: calc(100vh - 80px);
 }
 
 .nav-leftside {
@@ -86,29 +95,50 @@ nav {
 .nav-leftside .item {
     display: flex;
     align-items: center;
-    padding: 10px;
-    margin: 5px 0;
-    background-color: #f5f5f5;
-    transition: background-color 0.3s, color 0.3s;
+    padding: 12px 20px;
+    margin: 2px 10px;
+    background-color: transparent;
+    border-radius: 6px;
+    transition: background-color 0.2s, color 0.2s;
+    cursor: pointer;
 }
 
-.nav-leftside .item img {
-    margin-right: 8px;
-    transition: filter 0.3s;
+.nav-leftside .item.active {
+    background-color: #e3f2fd;
+    color: #2196f3;
+    font-weight: 600;
+}
+
+.nav-leftside .item.active img,
+.nav-leftside .item.active svg {
+    filter: brightness(0) saturate(100%) invert(48%) sepia(79%) saturate(2476%) hue-rotate(194deg) brightness(98%) contrast(96%);
+}
+
+.nav-leftside .item img,
+.nav-leftside .item svg {
+    margin-right: 12px;
+    width: 20px;
+    height: 20px;
+    opacity: 0.7;
+    transition: opacity 0.2s, filter 0.2s;
 }
 
 .nav-leftside .item:hover {
-    background-color: #e0e0e0;
+    background-color: #f5f5f5;
     color: #333;
 }
 
-.nav-leftside .item:hover img {
-    filter: brightness(0.5);
+.nav-leftside .item:hover img,
+.nav-leftside .item:hover svg {
+    opacity: 1;
 }
 
 .nav-leftside .item a {
     text-decoration: none;
     color: inherit;
+    width: 100%;
+    display: flex;
+    align-items: center;
 }
 
 .nav-profile {
@@ -120,21 +150,45 @@ nav {
 
 section {
     grid-area: section;
-    margin: 20px;
+    background-color: #f5f5f5;
+    padding: 30px;
+    overflow-y: auto;
 }
 
 section .container {
     width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Content Cards */
+.content-card {
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid #e0e0e0;
 }
 
 h1, h2, h3, a, ul, li, label, p {
-    color: #00394d;
+    color: #333333;
 }
 
 .section-title {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 24px 0;
+    color: #333333;
+    letter-spacing: -0.5px;
+    text-transform: uppercase;
+}
+
+.sub-section-title {
     font-size: 18px;
-    font-weight: bold;
-    margin: 0 0 20px 0;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    color: #333333;
 }
 
 .sensor-list {
@@ -144,71 +198,90 @@ h1, h2, h3, a, ul, li, label, p {
 .sensor-item {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     margin-bottom: 12px;
-    padding: 8px;
+    padding: 16px;
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
-    transition: background-color 0.3s;
+    border-radius: 6px;
+    transition: background-color 0.2s, box-shadow 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .sensor-item:hover {
-    background-color: #f5f5f5;
+    background-color: #fafafa;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 }
 
 .sensor-link {
     display: inline-block;
-    width: 350px;
-    font-size: 16px;
-    color: #00394d;
+    flex: 1;
+    font-size: 15px;
+    color: #333333;
     text-decoration: none;
+    font-weight: 500;
 }
 
 .sensor-link:hover {
-    text-decoration: underline;
+    color: #2196f3;
+    text-decoration: none;
 }
 
 button {
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    padding: 4px 8px;
-    margin: 0 5px;
-    background-color: #f5f5f5;
-    color: #00394d;
+    padding: 8px 16px;
+    margin: 0 4px;
+    background-color: #2196f3;
+    color: #ffffff;
     text-align: center;
     cursor: pointer;
     border: none;
-    font-family: 'PoppinsFont', Gotham, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    border-radius: 4px;
+    font-family: 'PoppinsFont', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px;
-    transition: 0.3s;
+    font-weight: 500;
+    transition: background-color 0.2s, box-shadow 0.2s;
     text-decoration: none;
-    transition-duration: 0.4s;
 }
 
 button:hover {
+    background-color: #1976d2;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
+}
+
+button.secondary {
+    background-color: #f5f5f5;
+    color: #333333;
+}
+
+button.secondary:hover {
     background-color: #e0e0e0;
+    box-shadow: none;
 }
 
 .help-button {
-    background-color: #003366;
+    background-color: #757575;
     color: white;
     border: none;
     border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
-    line-height: 15px;
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    line-height: 1;
     text-align: center;
     cursor: pointer;
-    margin-left: 5px;
+    margin-left: 8px;
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    font-weight: bold;
+    font-weight: 600;
+    transition: background-color 0.2s;
 }
 
 .help-button:hover {
-    background-color: #004080;
+    background-color: #616161;
 }
 
 .modal-overlay {

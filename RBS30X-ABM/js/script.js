@@ -44,6 +44,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const copyButton = document.getElementById("copy-button");
     const howButton = document.getElementById("how-button");
 
+    // Verify all required elements exist
+    if (!generateButton) {
+        console.error("Generate button not found!");
+        return;
+    }
+    if (!hexSection) {
+        console.error("Hex section not found!");
+        return;
+    }
+    if (!hexOutput) {
+        console.error("Hex output not found!");
+        return;
+    }
+
 
     /* ============================================================
        Help Button Popups
@@ -88,9 +102,10 @@ document.addEventListener("DOMContentLoaded", () => {
        Format: 0E + actHex + swtHex + scalingHex + startStopHex + 000000
     ============================================================ */
     generateButton.addEventListener("click", () => {
+        console.log("Generate button clicked");
 
-        const movStart = enableMovementStart.checked;
-        const movStop = enableMovementStop.checked;
+        const movStart = enableMovementStart ? enableMovementStart.checked : false;
+        const movStop = enableMovementStop ? enableMovementStop.checked : false;
 
         if (!movStart && !movStop) {
             showDialog(
@@ -108,13 +123,14 @@ document.addEventListener("DOMContentLoaded", () => {
         else if (!movStart && movStop) startStopHex = "01";
 
         const downlinkTypeHex = "0E";
-        const actHex = accelerationThreshold.value;
-        const swtHex = settlingWindow.value;
-        const scalingHex = scalingFactor.value;
+        const actHex = accelerationThreshold ? accelerationThreshold.value : "05";
+        const swtHex = settlingWindow ? settlingWindow.value : "14";
+        const scalingHex = scalingFactor ? scalingFactor.value : "00";
         const pad = "000000";
 
         const finalHex = downlinkTypeHex + actHex + swtHex + scalingHex + startStopHex + pad;
 
+        console.log("Generated hex:", finalHex);
         hexOutput.textContent = finalHex;
         hexSection.style.display = "block";
     });
@@ -123,28 +139,32 @@ document.addEventListener("DOMContentLoaded", () => {
     /* ============================================================
        Copy Hexcode
     ============================================================ */
-    copyButton.addEventListener("click", () => {
-        if (!hexOutput.textContent) {
-            showDialog("No hexcode to copy.");
-            return;
-        }
-        navigator.clipboard.writeText(hexOutput.textContent)
-            .then(() => showDialog("Hexcode copied."))
-            .catch(() => showDialog("Unable to copy hexcode."));
-    });
+    if (copyButton) {
+        copyButton.addEventListener("click", () => {
+            if (!hexOutput || !hexOutput.textContent) {
+                showDialog("No hexcode to copy.");
+                return;
+            }
+            navigator.clipboard.writeText(hexOutput.textContent)
+                .then(() => showDialog("Hexcode copied."))
+                .catch(() => showDialog("Unable to copy hexcode."));
+        });
+    }
 
 
     /* ============================================================
        How to Use Hexcode
     ============================================================ */
-    howButton.addEventListener("click", () => {
-        showDialog(
-            "1. Copy the generated hex string.\n" +
-            "2. Paste it into your LoRaWAN server or gateway downlink tool. For MultiTech gateways, open the gateway's mPower web interface, choose LoRaWAN, Downlink Queue. Choose Add New, then paste the hexcode into the Data input box. Set Ack Attempts to 2 and Rx Window to 2.\n" +
-            "3. Send the downlink to your RadioBridge sensor.\n" +
-            "4. The sensor applies the configuration the next time it sends an uplink."
-        );
-    });
+    if (howButton) {
+        howButton.addEventListener("click", () => {
+            showDialog(
+                "1. Copy the generated hex string.\n" +
+                "2. Paste it into your LoRaWAN server or gateway downlink tool. For MultiTech gateways, open the gateway's mPower web interface, choose LoRaWAN, Downlink Queue. Choose Add New, then paste the hexcode into the Data input box. Set Ack Attempts to 2 and Rx Window to 2.\n" +
+                "3. Send the downlink to your RadioBridge sensor.\n" +
+                "4. The sensor applies the configuration the next time it sends an uplink."
+            );
+        });
+    }
 
 
     /* ============================================================

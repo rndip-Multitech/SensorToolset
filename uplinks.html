@@ -222,7 +222,10 @@
                     <a href="downlinks.html">RadioBridge Downlinks</a>
                 </li>
                 <li class="item">
-                    <img src="NetworkDashboard-0.1/static/icons/send.svg" width="24" height="24" class="icon-margin" alt="Tools">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 2L11 13"></path>
+                        <path d="M22 2l-7 20-4-9-9-4 20-7z"></path>
+                    </svg>
                     <a href="tools_downlinks.html">Downlink Tools</a>
                 </li>
                 <li class="item">
@@ -441,8 +444,28 @@
             }
             
             const devEui = getDevEuiFromMessage(message);
-            const decodedResult = decodeMessageWithSelection(message, getDefaultDecoderId());
+            const defaultDecoderId = getDefaultDecoderId();
+            
+            // Check if there's a per-device decoder mapping
+            const decoderMap = loadDecoderMap();
+            const selectedDecoderId = (devEui && decoderMap[devEui]) ? decoderMap[devEui] : defaultDecoderId;
+            
+            const decodedResult = decodeMessageWithSelection(message, selectedDecoderId);
             const time = (message && message.data && typeof message.data === 'object' && (message.data.current_time || message.data.time)) || new Date().toISOString();
+            
+            // Debug logging for Sensative Strips
+            if (selectedDecoderId && (selectedDecoderId.includes('sensative') || selectedDecoderId.includes('strips'))) {
+                const port = message.data?.port;
+                const hasStripsData = decodedResult.decoded && (
+                    (decodedResult.decoded.port === 1 && Array.isArray(decodedResult.decoded.decoded)) ||
+                    decodedResult.decoded.BatteryReport || decodedResult.decoded.TempReport
+                );
+                if (hasStripsData) {
+                    console.log(`[Cache] Caching Sensative Strips sensor data message for ${devEui}, port: ${port}, eventType: ${decodedResult.eventType}`);
+                } else if (decodedResult.eventType === 'downlink_ack' || decodedResult.decoded?.port === 11) {
+                    console.log(`[Cache] Caching Sensative Strips non-sensor message (${decodedResult.eventType || 'port 11'}) for ${devEui}`);
+                }
+            }
             
             const messageRecord = {
                 id: Date.now() + Math.random(), // unique ID

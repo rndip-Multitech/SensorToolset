@@ -117,6 +117,24 @@ def sensors_page():
     return send_file('sensors.html')
 
 
+@app.route('/RBS30X-ABM/rbs30x-abm.html')
+@app.route('/RBS30x-ABM/rbs30x-abm.html')
+@app.route('/rbs30x-abm.html')
+def abm_page():
+    """Serve the RBS30X-ABM sensor configuration page."""
+    return send_file('RBS30X-ABM/rbs30x-abm.html')
+
+
+@app.route('/RBS30X-ABM/<path:filename>')
+@app.route('/RBS30x-ABM/<path:filename>')
+def abm_static(filename):
+    """Serve static files from RBS30X-ABM directory (images, CSS, JS)."""
+    # Security: prevent directory traversal
+    if '..' in filename or filename.startswith('/'):
+        return "Invalid path", 403
+    return send_from_directory('RBS30X-ABM', filename)
+
+
 @app.route('/connect', methods=['POST'])
 def connect_route():
     """
@@ -292,12 +310,31 @@ def serve_static(path):
     if '..' in path or path.startswith('/'):
         return "Invalid path", 403
     
-    # Check if the file exists
+    # Normalize path for case-insensitive matching on Windows
+    normalized_path = path.replace('\\', '/')
+    
+    # Check if the file exists (case-sensitive check first)
     if os.path.isfile(path):
-        # Get the directory and filename
         directory = os.path.dirname(path) if os.path.dirname(path) else '.'
         filename = os.path.basename(path)
         return send_from_directory(directory, filename)
+    
+    # Case-insensitive fallback: try to find the file with different case
+    # This is useful on Windows where filesystem is case-insensitive but URLs might be case-sensitive
+    if not os.path.isfile(path):
+        # Try to find the file with case-insensitive matching
+        path_parts = normalized_path.split('/')
+        if len(path_parts) > 1:
+            dir_part = '/'.join(path_parts[:-1])
+            file_part = path_parts[-1]
+            if os.path.isdir(dir_part):
+                # List files in directory and find case-insensitive match
+                try:
+                    for actual_file in os.listdir(dir_part):
+                        if actual_file.lower() == file_part.lower():
+                            return send_from_directory(dir_part, actual_file)
+                except OSError:
+                    pass
     
     # If it's a directory, try to serve index.html from it
     if os.path.isdir(path):
@@ -305,15 +342,18 @@ def serve_static(path):
         if os.path.isfile(index_path):
             return send_from_directory(path, 'index.html')
         # If no index.html, try to find an HTML file with the directory name
-        html_files = [f for f in os.listdir(path) if f.endswith('.html')]
-        if html_files:
-            # Try to find a file matching the directory name
-            dir_name = os.path.basename(path.rstrip('/'))
-            for html_file in html_files:
-                if html_file.startswith(dir_name) or html_file == 'index.html':
-                    return send_from_directory(path, html_file)
-            # If no match, serve the first HTML file
-            return send_from_directory(path, html_files[0])
+        try:
+            html_files = [f for f in os.listdir(path) if f.endswith('.html')]
+            if html_files:
+                # Try to find a file matching the directory name
+                dir_name = os.path.basename(path.rstrip('/'))
+                for html_file in html_files:
+                    if html_file.startswith(dir_name) or html_file == 'index.html':
+                        return send_from_directory(path, html_file)
+                # If no match, serve the first HTML file
+                return send_from_directory(path, html_files[0])
+        except OSError:
+            pass
     
     # Default: try to serve the file anyway (for relative paths)
     try:
