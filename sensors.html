@@ -261,14 +261,28 @@
             </p>
 
             <div class="sensor-selector">
-                <label for="sensorSelect" style="font-weight: bold; margin-right: 10px;">Select Sensor:</label>
-                <select id="sensorSelect">
-                    <option value="">-- Loading sensors --</option>
-                </select>
-                <button type="button" id="refreshBtn" style="margin-left: 10px;">Refresh</button>
-                <div class="auto-refresh-toggle">
-                    <input type="checkbox" id="autoRefresh" checked>
-                    <label for="autoRefresh">Auto-refresh (30s)</label>
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <label for="sensorSelect" style="font-weight: bold; margin-right: 10px;">Select Sensor:</label>
+                    <select id="sensorSelect">
+                        <option value="">-- Loading sensors --</option>
+                    </select>
+                    <button type="button" id="refreshBtn" style="margin-left: 10px;">Refresh</button>
+                    <div class="auto-refresh-toggle">
+                        <input type="checkbox" id="autoRefresh" checked>
+                        <label for="autoRefresh">Auto-refresh (30s)</label>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                    <label for="dateFrom" style="font-weight: bold;">Date Range:</label>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <label for="dateFrom" style="font-size: 12px; color: #666;">From:</label>
+                        <input type="datetime-local" id="dateFrom" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <label for="dateTo" style="font-size: 12px; color: #666;">To:</label>
+                        <input type="datetime-local" id="dateTo" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                    </div>
+                    <button type="button" id="clearDateFilter" style="padding: 6px 12px; background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 14px;">Clear Filter</button>
                 </div>
             </div>
 
@@ -287,11 +301,12 @@
         // IndexedDB setup
         let db = null;
         const DB_NAME = 'RBTUplinksDB';
-        const DB_VERSION = 1;
+        const DB_VERSION = 2; // Must match uplinks.html version
         const STORE_NAME = 'messages';
         let currentCharts = {};
         let autoRefreshInterval = null;
         let currentDevEUI = null;
+        let dateFilter = { from: null, to: null };
 
         function initDB() {
             return new Promise((resolve, reject) => {
@@ -304,10 +319,19 @@
                 request.onupgradeneeded = (event) => {
                     const database = event.target.result;
                     if (!database.objectStoreNames.contains(STORE_NAME)) {
+                        // New database - create with all indexes including fingerprint
                         const objectStore = database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
                         objectStore.createIndex('deveui', 'deveui', { unique: false });
                         objectStore.createIndex('time', 'time', { unique: false });
                         objectStore.createIndex('eventType', 'eventType', { unique: false });
+                        objectStore.createIndex('fingerprint', 'fingerprint', { unique: true });
+                    } else {
+                        // Upgrade existing DB: add fingerprint index if it doesn't exist
+                        const objectStore = event.target.transaction.objectStore(STORE_NAME);
+                        if (!objectStore.indexNames.contains('fingerprint')) {
+                            // Create as non-unique first to avoid errors with existing duplicates
+                            objectStore.createIndex('fingerprint', 'fingerprint', { unique: false });
+                        }
                     }
                 };
             });
@@ -632,20 +656,44 @@
             return '';
         }
 
+        function filterMessagesByDate(messages, dateFrom, dateTo) {
+            if (!dateFrom && !dateTo) {
+                return messages;
+            }
+            
+            return messages.filter(msg => {
+                const msgDate = new Date(msg.time);
+                if (dateFrom && msgDate < dateFrom) {
+                    return false;
+                }
+                if (dateTo && msgDate > dateTo) {
+                    return false;
+                }
+                return true;
+            });
+        }
+
         function buildChartData(messages, fieldName, extractor, unitExtractor = null) {
             const data = [];
             const labels = [];
-            const maxPoints = 100;
+            const maxPoints = 1000; // Increased to allow more data points with date filtering
             let unit = '';
 
-            const sorted = messages.slice(0, maxPoints).reverse();
+            // Filter messages by date range if set
+            let filteredMessages = messages;
+            if (dateFilter.from || dateFilter.to) {
+                filteredMessages = filterMessagesByDate(messages, dateFilter.from, dateFilter.to);
+            }
+
+            const sorted = filteredMessages.slice(0, maxPoints).reverse();
             sorted.forEach(msg => {
                 const timestamp = new Date(msg.time);
                 const values = extractor(msg.decoded || {});
                 const value = values[fieldName];
                 
                 if (value !== undefined && value !== null) {
-                    labels.push(timestamp.toLocaleTimeString());
+                    // Show full date and time in labels
+                    labels.push(timestamp.toLocaleString());
                     data.push(value);
                     // Extract unit from first message that has this field
                     if (!unit && unitExtractor) {
@@ -737,7 +785,25 @@
                             grid: { color: 'rgba(0,0,0,0.05)' }
                         },
                         x: {
-                            grid: { display: false }
+                            grid: { display: false },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10,
+                                callback: function(value, index, values) {
+                                    // Show abbreviated date/time format
+                                    const label = this.getLabelForValue(value);
+                                    if (!label) return '';
+                                    const date = new Date(label);
+                                    if (isNaN(date.getTime())) return label;
+                                    // Format: MM/DD HH:MM
+                                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getDate().toString().padStart(2, '0');
+                                    const hours = date.getHours().toString().padStart(2, '0');
+                                    const minutes = date.getMinutes().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                }
+                            }
                         }
                     }
                 }
@@ -755,20 +821,26 @@
                 currentCharts[canvasId].destroy();
             }
 
+            // Filter messages by date range if set
+            let filteredMessages = messages;
+            if (dateFilter.from || dateFilter.to) {
+                filteredMessages = filterMessagesByDate(messages, dateFilter.from, dateFilter.to);
+            }
+
             const data = { start: [], stop: [] };
             const labels = [];
             let totalStartCount = 0;
             let totalStopCount = 0;
-            const maxPoints = 100;
+            const maxPoints = 1000; // Increased to allow more data points with date filtering
 
-            const sorted = messages.slice(0, maxPoints).reverse();
+            const sorted = filteredMessages.slice(0, maxPoints).reverse();
             sorted.forEach(msg => {
                 const timestamp = new Date(msg.time);
                 const decoded = normalizeDecoded(msg.decoded || {});
                 const eventType = msg.eventType || '';
                 const binary = extractBinaryValues(decoded);
                 
-                labels.push(timestamp.toLocaleTimeString());
+                labels.push(timestamp.toLocaleString());
                 
                 // Check for movement start/stop in various formats
                 let isStart = false;
@@ -911,7 +983,25 @@
                             grid: { color: 'rgba(0,0,0,0.05)' }
                         },
                         x: {
-                            grid: { display: false }
+                            grid: { display: false },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10,
+                                callback: function(value, index, values) {
+                                    // Show abbreviated date/time format
+                                    const label = this.getLabelForValue(value);
+                                    if (!label) return '';
+                                    const date = new Date(label);
+                                    if (isNaN(date.getTime())) return label;
+                                    // Format: MM/DD HH:MM
+                                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getDate().toString().padStart(2, '0');
+                                    const hours = date.getHours().toString().padStart(2, '0');
+                                    const minutes = date.getMinutes().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                }
+                            }
                         }
                     }
                 }
@@ -923,10 +1013,20 @@
 
         async function renderSensorDashboard(deveui) {
             currentDevEUI = deveui;
-            const messages = await getSensorMessages(deveui);
-            if (messages.length === 0) {
+            let allMessages = await getSensorMessages(deveui);
+            if (allMessages.length === 0) {
                 document.getElementById('sensorContent').innerHTML = '<div class="no-data">No data available for this sensor</div>';
                 return;
+            }
+
+            // Filter messages by date range if set
+            let messages = allMessages;
+            if (dateFilter.from || dateFilter.to) {
+                messages = filterMessagesByDate(allMessages, dateFilter.from, dateFilter.to);
+                if (messages.length === 0) {
+                    document.getElementById('sensorContent').innerHTML = '<div class="no-data">No data available for the selected date range</div>';
+                    return;
+                }
             }
 
             // Destroy all existing charts
@@ -1262,10 +1362,16 @@
             }
 
             // Build HTML - Status indicators FIRST
+            const totalMessages = allMessages.length;
+            const filteredMessages = messages.length;
+            const dateFilterActive = dateFilter.from || dateFilter.to;
             let html = `<div class="sensor-card">
                 <div class="sensor-header">
                     <h3>Sensor: ${deveui}</h3>
-                    <span style="color: #666; font-size: 14px;">${messages.length} messages</span>
+                    <span style="color: #666; font-size: 14px;">
+                        ${dateFilterActive ? `${filteredMessages} of ${totalMessages} messages` : `${totalMessages} messages`}
+                        ${dateFilterActive ? ' (filtered)' : ''}
+                    </span>
                 </div>
                 <div class="sensor-info">
                     <div class="info-item">
@@ -1273,9 +1379,18 @@
                         <span class="info-value">${new Date(messages[0].time).toLocaleString()}</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Total Messages</span>
-                        <span class="info-value">${messages.length}</span>
+                        <span class="info-label">${dateFilterActive ? 'Filtered Messages' : 'Total Messages'}</span>
+                        <span class="info-value">${filteredMessages}${dateFilterActive ? ` / ${totalMessages}` : ''}</span>
                     </div>
+                    ${dateFilterActive ? `
+                    <div class="info-item">
+                        <span class="info-label">Date Range</span>
+                        <span class="info-value" style="font-size: 14px;">
+                            ${dateFilter.from ? new Date(dateFilter.from).toLocaleDateString() : 'Start'} - 
+                            ${dateFilter.to ? new Date(dateFilter.to).toLocaleDateString() : 'End'}
+                        </span>
+                    </div>
+                    ` : ''}
                 </div>`;
 
             // Status Indicators Section (AT THE TOP)
@@ -1713,6 +1828,42 @@
                         startAutoRefresh();
                     } else {
                         stopAutoRefresh();
+                    }
+                });
+
+                // Date filter event listeners
+                document.getElementById('dateFrom').addEventListener('change', function() {
+                    if (this.value) {
+                        dateFilter.from = new Date(this.value);
+                    } else {
+                        dateFilter.from = null;
+                    }
+                    if (currentDevEUI) {
+                        renderSensorDashboard(currentDevEUI);
+                    }
+                });
+
+                document.getElementById('dateTo').addEventListener('change', function() {
+                    if (this.value) {
+                        // Set to end of day for the selected date
+                        const date = new Date(this.value);
+                        date.setHours(23, 59, 59, 999);
+                        dateFilter.to = date;
+                    } else {
+                        dateFilter.to = null;
+                    }
+                    if (currentDevEUI) {
+                        renderSensorDashboard(currentDevEUI);
+                    }
+                });
+
+                document.getElementById('clearDateFilter').addEventListener('click', function() {
+                    document.getElementById('dateFrom').value = '';
+                    document.getElementById('dateTo').value = '';
+                    dateFilter.from = null;
+                    dateFilter.to = null;
+                    if (currentDevEUI) {
+                        renderSensorDashboard(currentDevEUI);
                     }
                 });
 

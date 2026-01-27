@@ -276,6 +276,7 @@
                     <div style="display: flex; gap: 8px;">
                         <button type="button" class="action-button" id="downloadCSVBtn">Download CSV</button>
                         <button type="button" class="action-button" id="downloadJSONBtn">Download JSON</button>
+                        <button type="button" class="action-button" id="removeDuplicatesBtn">Remove Duplicates</button>
                         <button type="button" class="action-button" id="clearCacheBtn">Clear Cache</button>
                     </div>
                 </div>
@@ -365,7 +366,7 @@
         // IndexedDB for message caching
         let db = null;
         const DB_NAME = 'RBTUplinksDB';
-        const DB_VERSION = 1;
+        const DB_VERSION = 2; // Incremented to handle fingerprint index upgrade
         const STORE_NAME = 'messages';
         
         // Initialize IndexedDB
@@ -380,6 +381,7 @@
                 request.onupgradeneeded = (event) => {
                     const database = event.target.result;
                     if (!database.objectStoreNames.contains(STORE_NAME)) {
+                        // New database - create with fingerprint index as unique
                         const objectStore = database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
                         objectStore.createIndex('deveui', 'deveui', { unique: false });
                         objectStore.createIndex('time', 'time', { unique: false });
@@ -389,21 +391,111 @@
                         // Upgrade existing DB: add fingerprint index if it doesn't exist
                         const objectStore = event.target.transaction.objectStore(STORE_NAME);
                         if (!objectStore.indexNames.contains('fingerprint')) {
-                            objectStore.createIndex('fingerprint', 'fingerprint', { unique: true });
+                            // First, regenerate fingerprints for existing messages that don't have them
+                            // Then create the index as non-unique (we'll clean duplicates first)
+                            objectStore.createIndex('fingerprint', 'fingerprint', { unique: false });
                         }
                     }
                 };
             });
         }
         
+        // Remove duplicate messages based on fingerprint (keeps the oldest message for each fingerprint)
+        async function removeDuplicates() {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                
+                // Try to use fingerprint index, fall back to scanning all records
+                let index;
+                try {
+                    index = store.index('fingerprint');
+                } catch (e) {
+                    // Index doesn't exist, scan all records
+                    index = null;
+                }
+                
+                const fingerprints = new Map(); // fingerprint -> {id, time}
+                const duplicates = [];
+                
+                const request = index ? index.openCursor() : store.openCursor();
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        const record = cursor.value;
+                        let fingerprint = record.fingerprint;
+                        
+                        // If no fingerprint exists, generate one from the original message
+                        if (!fingerprint && record.original) {
+                            fingerprint = getMessageFingerprint(record.original);
+                            // Update the record with the fingerprint
+                            record.fingerprint = fingerprint;
+                            cursor.update(record);
+                        }
+                        
+                        if (fingerprint) {
+                            if (fingerprints.has(fingerprint)) {
+                                // This is a duplicate - keep the one with the earliest time
+                                const existing = fingerprints.get(fingerprint);
+                                const recordTime = new Date(record.time || record.cachedAt || 0).getTime();
+                                const existingTime = new Date(existing.time || existing.cachedAt || 0).getTime();
+                                
+                                if (recordTime < existingTime) {
+                                    // This record is older, keep it and delete the existing one
+                                    duplicates.push(existing.id);
+                                    fingerprints.set(fingerprint, record);
+                                } else {
+                                    // Existing record is older, delete this one
+                                    duplicates.push(record.id);
+                                }
+                            } else {
+                                fingerprints.set(fingerprint, record);
+                            }
+                        }
+                        cursor.continue();
+                    } else {
+                        // Delete duplicates (keep the oldest one for each fingerprint)
+                        if (duplicates.length > 0) {
+                            console.log(`[Cache] Removing ${duplicates.length} duplicate messages`);
+                            duplicates.forEach(id => {
+                                store.delete(id);
+                            });
+                        }
+                        resolve(duplicates.length);
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+        
         // Generate a unique message fingerprint
         function getMessageFingerprint(message) {
             const devEui = getDevEuiFromMessage(message);
-            const time = (message && message.data && typeof message.data === 'object' && (message.data.current_time || message.data.time)) || '';
+            const dataObj = (message && message.data && typeof message.data === 'object') ? message.data : {};
+            
+            // Use multiple fields to create a unique fingerprint
             const topic = message.topic || '';
-            const payload = (message.data && typeof message.data === 'object' && message.data.data) || '';
+            const time = dataObj.current_time || dataObj.time || '';
+            
+            // Try to get payload from multiple possible locations
+            let payload = '';
+            if (dataObj.payload_hex) {
+                payload = dataObj.payload_hex;
+            } else if (dataObj.data) {
+                // If data is a string, use it directly; if object, stringify it
+                payload = typeof dataObj.data === 'string' ? dataObj.data : JSON.stringify(dataObj.data);
+            } else if (dataObj.payload) {
+                payload = typeof dataObj.payload === 'string' ? dataObj.payload : JSON.stringify(dataObj.payload);
+            }
+            
+            // Also include packet_count and protocol_version if available (for RadioBridge messages)
+            const packetCount = dataObj.packet_count !== undefined ? String(dataObj.packet_count) : '';
+            const protocolVersion = dataObj.protocol_version !== undefined ? String(dataObj.protocol_version) : '';
+            
             // Create fingerprint from key message attributes
-            return `${topic}|${devEui}|${time}|${payload}`;
+            // Include packet_count and protocol_version to help distinguish RadioBridge messages
+            return `${topic}|${devEui}|${time}|${payload}|${packetCount}|${protocolVersion}`;
         }
         
         // Check if message already exists in cache (using fingerprint index)
@@ -436,10 +528,13 @@
         async function cacheMessage(message) {
             if (!db) await initDB();
             
-            // Check if message already exists
+            // Generate fingerprint first
             const fingerprint = getMessageFingerprint(message);
+            
+            // Check if message already exists using fingerprint index
             const exists = await messageExists(fingerprint);
             if (exists) {
+                console.log('[Cache] Duplicate message detected, skipping:', fingerprint.substring(0, 100));
                 return; // Skip duplicate
             }
             
@@ -451,7 +546,8 @@
             const selectedDecoderId = (devEui && decoderMap[devEui]) ? decoderMap[devEui] : defaultDecoderId;
             
             const decodedResult = decodeMessageWithSelection(message, selectedDecoderId);
-            const time = (message && message.data && typeof message.data === 'object' && (message.data.current_time || message.data.time)) || new Date().toISOString();
+            const dataObj = (message && message.data && typeof message.data === 'object') ? message.data : {};
+            const time = dataObj.current_time || dataObj.time || new Date().toISOString();
             
             // Debug logging for Sensative Strips
             if (selectedDecoderId && (selectedDecoderId.includes('sensative') || selectedDecoderId.includes('strips'))) {
@@ -469,7 +565,7 @@
             
             const messageRecord = {
                 id: Date.now() + Math.random(), // unique ID
-                fingerprint: fingerprint, // for deduplication
+                fingerprint: fingerprint, // for deduplication (unique index)
                 original: message,
                 deveui: devEui || '',
                 time: time,
@@ -483,12 +579,17 @@
                 const transaction = db.transaction([STORE_NAME], 'readwrite');
                 const store = transaction.objectStore(STORE_NAME);
                 const request = store.add(messageRecord);
-                request.onsuccess = () => resolve();
+                request.onsuccess = () => {
+                    console.log('[Cache] Message cached successfully:', fingerprint.substring(0, 100));
+                    resolve();
+                };
                 request.onerror = () => {
-                    // If error is due to duplicate key, that's okay
+                    // If error is due to duplicate fingerprint (unique constraint), that's okay - skip it
                     if (request.error.name === 'ConstraintError') {
-                        resolve();
+                        console.log('[Cache] Duplicate detected on add (ConstraintError), skipping:', fingerprint.substring(0, 100));
+                        resolve(); // Treat as success (duplicate was prevented)
                     } else {
+                        console.error('[Cache] Error caching message:', request.error, fingerprint.substring(0, 100));
                         reject(request.error);
                     }
                 };
@@ -871,6 +972,22 @@
             // Initialize IndexedDB
             try {
                 await initDB();
+                
+                // Run duplicate removal on first load (only once per session)
+                const duplicateCleanupDone = sessionStorage.getItem('duplicateCleanupDone');
+                if (!duplicateCleanupDone) {
+                    try {
+                        const removed = await removeDuplicates();
+                        if (removed > 0) {
+                            console.log(`[Cache] Removed ${removed} duplicate messages on initialization`);
+                            showNotification(`Removed ${removed} duplicate messages from cache`);
+                        }
+                        sessionStorage.setItem('duplicateCleanupDone', 'true');
+                    } catch (e) {
+                        console.warn('[Cache] Error removing duplicates on init:', e);
+                    }
+                }
+                
                 await updateCacheStats();
                 // Load cached messages on page load
                 displayCachedMessages(getActiveFilters());
@@ -891,6 +1008,22 @@
             // Set up download buttons
             document.getElementById('downloadCSVBtn').addEventListener('click', downloadCSV);
             document.getElementById('downloadJSONBtn').addEventListener('click', downloadJSON);
+            
+            // Set up remove duplicates button
+            document.getElementById('removeDuplicatesBtn').addEventListener('click', async () => {
+                try {
+                    const removed = await removeDuplicates();
+                    await updateCacheStats();
+                    displayCachedMessages(getActiveFilters());
+                    if (removed > 0) {
+                        showNotification(`Removed ${removed} duplicate messages`);
+                    } else {
+                        showNotification('No duplicates found');
+                    }
+                } catch (e) {
+                    alert('Error removing duplicates: ' + e);
+                }
+            });
             
             // Set up clear cache button
             document.getElementById('clearCacheBtn').addEventListener('click', async () => {
@@ -1015,34 +1148,50 @@
             fetch(`/messages?filter=${encodeURIComponent(filter)}`)
                 .then(response => response.json())
                 .then(data => {
-                    const messageTable = document.getElementById('messageTableBody');
-                    messageTable.innerHTML = '';
-                    
-                    if (data.messages && data.messages.length === 0) {
-                        messageTable.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">No messages received yet</td></tr>';
-                        return;
-                    }
+                    // Don't clear the table here - let displayCachedMessages handle it
+                    // This way cached messages remain visible even if no new messages arrive
                     
                     if (!data.messages) {
-                        messageTable.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">Error loading messages</td></tr>';
+                        // Error loading messages - just show cached ones
+                        console.warn('Error loading messages from server, showing cached messages');
+                        const filters = getActiveFilters();
+                        filters.search = filter || filters.search;
+                        displayCachedMessages(filters);
                         return;
                     }
                     
-                    data.messages.reverse();
-                    // Cache all new messages (with deduplication)
-                    const cachePromises = data.messages.map(message => cacheMessage(message).catch(e => {
-                        console.warn('Failed to cache message:', e);
-                    }));
-                    Promise.all(cachePromises).then(() => {
-                        // Update cache stats after caching
-                        updateCacheStats();
-                    });
-                    
-                    // Now display messages (apply active filters)
-                    const filters = getActiveFilters();
-                    filters.search = filter || filters.search; // Use filter param if provided
-                    displayCachedMessages(filters);
+                    if (data.messages && data.messages.length > 0) {
+                        // We have new messages - cache them
+                        data.messages.reverse();
+                        // Cache all new messages (with deduplication)
+                        const cachePromises = data.messages.map(message => cacheMessage(message).catch(e => {
+                            console.warn('Failed to cache message:', e);
+                        }));
+                        Promise.all(cachePromises).then(() => {
+                            // Update cache stats after caching
+                            updateCacheStats();
+                            // Refresh display to show new messages
+                            const filters = getActiveFilters();
+                            filters.search = filter || filters.search;
+                            displayCachedMessages(filters);
+                        });
+                    } else {
+                        // No new messages from server, but show cached ones
+                        const filters = getActiveFilters();
+                        filters.search = filter || filters.search;
+                        displayCachedMessages(filters);
+                    }
                     return; // Skip old rendering logic, use displayCachedMessages instead
+                })
+                .catch(error => {
+                    // Network error or other fetch failure - show cached messages
+                    console.warn('Failed to fetch messages from server:', error);
+                    const filters = getActiveFilters();
+                    filters.search = filter || filters.search;
+                    displayCachedMessages(filters);
+                });
+            });
+        };
                     
                     // OLD RENDERING CODE BELOW (now handled by displayCachedMessages)
                     data.messages.forEach((message, index) => {
@@ -1130,9 +1279,11 @@
                     });
                 })
                 .catch(error => {
-                    console.error('Error fetching messages:', error);
-                    const messageTable = document.getElementById('messageTableBody');
-                    messageTable.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: red;">Error loading messages: ' + error + '</td></tr>';
+                    // Network error or other fetch failure - show cached messages instead of error
+                    console.warn('Failed to fetch messages from server:', error);
+                    const filters = getActiveFilters();
+                    filters.search = filter || filters.search;
+                    displayCachedMessages(filters);
                 });
             });
         };

@@ -1,7 +1,7 @@
 {
   "AppName": "Sensor Toolkit",
-  "AppVersion": "1.5.0",
+  "AppVersion": "1.6.0",
   "AppDescription": "MQTT uplink monitor + pluggable payload decoders + sensor visualization + RadioBridge configuration/downlinks",
-  "AppVersionNotes": "Enhanced sensor monitoring: improved Sensative Strips array decoding, status indicators at top, grouped graphs, battery indicator, movement event graphs, live auto-refresh (30s), fixed navigation icons, improved UI design matching gateway console",
+  "AppVersionNotes": "Sensor monitoring enhancements: date range filtering for graphs, improved date/time labels on charts, increased data point capacity (1000 points), filtered message count display, clear filter functionality",
   "PersistentStorage": true
 }
