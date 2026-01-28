@@ -254,22 +254,37 @@ def _on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
                 data["data_decoded"] = decode_sensor_data(data["data"])
                 message_type = data["data_decoded"].get("message_type")
 
-            # Scrape DevEUI and sensor type for sensor discovery
+            # Scrape DevEUI and sensor type for sensor discovery (any uplink with deveui)
             dev_eui = data.get("deveui")
-            if dev_eui and message_type:
-                if isinstance(message_type, str):
-                    sensor_type = message_type.lower()
+            if dev_eui:
+                sensor_type = "Other"
+                if message_type and isinstance(message_type, str):
+                    st = message_type.lower()
                     if not any(
-                        unwanted in sensor_type
+                        unwanted in st
                         for unwanted in ("unknown", "supervisory message", "reset message", "downlink", "device_info", "link_quality")
                     ):
-                        sensor_entry = {"DevEUI": dev_eui, "sensor_type": sensor_type}
-                        if sensor_entry not in sensor_list:
-                            sensor_list.append(sensor_entry)
-                            print(f"Discovered sensor: {sensor_entry}")
+                        sensor_type = st
+                existing = next((s for s in sensor_list if s.get("DevEUI") == dev_eui), None)
+                if existing:
+                    if sensor_type != "Other":
+                        existing["sensor_type"] = sensor_type
+                else:
+                    sensor_list.append({"DevEUI": dev_eui, "sensor_type": sensor_type})
+                    print(f"Discovered sensor: {dev_eui} ({sensor_type})")
+
+        elif isinstance(data, dict):
+            # No "data" payload (e.g. different broker format) – still discover by DevEUI
+            dev_eui = data.get("deveui")
+            if dev_eui and "up" in topic:
+                existing = next((s for s in sensor_list if s.get("DevEUI") == dev_eui), None)
+                if not existing:
+                    sensor_list.append({"DevEUI": dev_eui, "sensor_type": "Other"})
+                    print(f"Discovered sensor: {dev_eui} (Other)")
 
         # Add current timestamp
-        data['current_time'] = datetime.now().astimezone().isoformat()
+        if isinstance(data, dict):
+            data['current_time'] = datetime.now().astimezone().isoformat()
         
         message_buffer.append({"type": "json", "topic": topic, "data": data})
     except json.JSONDecodeError:
@@ -339,18 +354,19 @@ def send_downlink(data: Dict[str, Any], broker_ip: str | None = None) -> Dict[st
     
     topic = data["topic"]
     
-    # If hexcode is provided, use it directly
-    if "hexcode" in data:
+    # If hexcode or data (base64) is provided, use it directly (raw downlink)
+    raw_base64 = data.get("hexcode") or data.get("data")
+    if raw_base64 is not None:
         try:
-            # hexcode is already base64 encoded from the client
-            hexcode_base64 = data["hexcode"]
-            payload = json.dumps({"data": hexcode_base64})
-            
-            print(f"Publishing downlink to {topic} via {target_broker} with preloaded hexcode: {payload}")
+            payload_obj = {"data": raw_base64 if isinstance(raw_base64, str) else raw_base64}
+            if data.get("port") is not None:
+                payload_obj["port"] = int(data["port"])
+            payload = json.dumps(payload_obj)
+            print(f"Publishing downlink to {topic} via {target_broker} (port={data.get('port')})")
             publish.single(topic, payload, hostname=target_broker)
             return {"message": "Downlink message sent successfully"}
         except Exception as e:
-            return {"error": f"Error sending hexcode downlink: {str(e)}"}
+            return {"error": f"Error sending raw downlink: {str(e)}"}
     
     # Original logic: build downlink from form data
     if "sensor_type" not in data:

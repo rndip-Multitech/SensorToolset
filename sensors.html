@@ -228,14 +228,7 @@
                 </li>
                 <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
-                    <a href="downlinks.html">RadioBridge Downlinks</a>
-                </li>
-                <li class="item">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
-                        <path d="M22 2L11 13"></path>
-                        <path d="M22 2l-7 20-4-9-9-4 20-7z"></path>
-                    </svg>
-                    <a href="tools_downlinks.html">Downlink Tools</a>
+                    <a href="downlinks.html">Send Downlinks</a>
                 </li>
                 <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
@@ -1072,7 +1065,24 @@
                     }
                 }
                 
-                if (!decoded || Object.keys(decoded).length === 0 || decoded.error) {
+                // Helper: detect if this is effectively just a raw payload (no actual sensor fields)
+                function looksLikeRawPayload(obj) {
+                    if (!obj || typeof obj !== 'object') return false;
+                    const keys = Object.keys(obj);
+                    if (keys.length === 0) return false;
+                    const RAW_KEYS = new Set([
+                        'has_payload',
+                        'payload_hex',
+                        'payload_base64',
+                        'payload_len',
+                        'payload',
+                        'payload_ascii'
+                    ]);
+                    return keys.every(k => RAW_KEYS.has(k.toLowerCase()));
+                }
+                
+                // If decoded is empty, errored, or just raw payload metadata, try to auto-decode again
+                if (!decoded || Object.keys(decoded).length === 0 || decoded.error || looksLikeRawPayload(decoded)) {
                     try {
                         if (window.RBTDecoders) {
                             let decoder = null;

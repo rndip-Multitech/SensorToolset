@@ -114,15 +114,8 @@
                 </li>
                 <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
-                    <a href="downlinks.html">RadioBridge Downlinks</a>
+                    <a href="downlinks.html">Send Downlinks</a>
                 </li>
-            <li class="item">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
-                    <path d="M22 2L11 13"></path>
-                    <path d="M22 2l-7 20-4-9-9-4 20-7z"></path>
-                </svg>
-                <a href="tools_downlinks.html">Downlink Tools</a>
-            </li>
                 <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
                     <a href="decoders.html">Decoders</a>
@@ -180,6 +173,33 @@
             <div id="status" class="status"></div>
 
             <div class="panel">
+                <h3>Test decoder with payload (debug)</h3>
+                <p class="hint">Enter a hex or base64 payload and run a decoder to see the decoded output. Useful for debugging decoders without live uplinks.</p>
+                <div class="row" style="margin-bottom: 10px;">
+                    <label for="testDecoderSelect"><strong>Decoder</strong>:</label>
+                    <select id="testDecoderSelect" class="decoder-select" style="min-width: 220px;"></select>
+                    <label for="testDecoderPort" style="margin-left: 12px;"><strong>Port (fPort)</strong> (optional):</label>
+                    <input type="number" id="testDecoderPort" min="0" max="255" step="1" placeholder="e.g. 1" style="width: 80px; padding: 6px;">
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label for="testPayloadHex"><strong>Payload (hex)</strong></label>
+                    <textarea id="testPayloadHex" rows="3" placeholder="e.g. 02 01 64 00 0A" style="min-height: 70px; margin-top: 4px;"></textarea>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label for="testPayloadBase64"><strong>Payload (base64)</strong></label>
+                    <textarea id="testPayloadBase64" rows="2" placeholder="e.g. AgFkAAo=" style="min-height: 50px; margin-top: 4px;"></textarea>
+                </div>
+                <p class="hint">Enter one or both; hex is used if both are set. Spaces and 0x prefixes in hex are ignored.</p>
+                <div class="row" style="margin-top: 10px;">
+                    <button class="action-button" id="runDecoderTestBtn" type="button">Run decoder</button>
+                </div>
+                <div style="margin-top: 12px;">
+                    <label><strong>Result</strong></label>
+                    <pre id="testDecoderResult" class="mono" style="margin: 6px 0 0; padding: 12px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 4px; min-height: 80px; max-height: 320px; overflow: auto;">—</pre>
+                </div>
+            </div>
+
+            <div class="panel">
                 <div class="row" style="justify-content: space-between;">
                     <h3 style="margin: 0;">Installed custom decoders</h3>
                     <button class="action-button" id="refreshBtn" type="button">Refresh</button>
@@ -206,9 +226,98 @@
     </section>
 
     <script src="NetworkDashboard-0.1/static/js/decoders/decoder_registry.js"></script>
+    <script src="NetworkDashboard-0.1/static/js/decoders/radiobridge.js"></script>
+    <script src="NetworkDashboard-0.1/static/js/decoders/sensative_strips.js"></script>
+    <script src="NetworkDashboard-0.1/static/js/decoders/raw.js"></script>
     <script>
         const statusEl = document.getElementById('status');
         const tableBody = document.getElementById('decoderTableBody');
+
+        // --- Decoder tester (manual hex/base64 debug) ---
+        function hexToBytes(hexStr) {
+            if (!hexStr || typeof hexStr !== 'string') return null;
+            const s = hexStr.replace(/\s+/g, '').replace(/0x/gi, '');
+            if (!/^[0-9a-fA-F]*$/.test(s) || s.length % 2 !== 0) return null;
+            const bytes = new Uint8Array(s.length / 2);
+            for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(s.substr(i * 2, 2), 16);
+            return bytes;
+        }
+        function bytesToBase64(bytes) {
+            if (!bytes || !bytes.length) return '';
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i] & 0xff);
+            return btoa(binary);
+        }
+        function populateDecoderTesterDropdown() {
+            const sel = document.getElementById('testDecoderSelect');
+            if (!sel || !window.RBTDecoders || !window.RBTDecoders.listDecoders) return;
+            const list = window.RBTDecoders.listDecoders();
+            sel.innerHTML = '';
+            list.forEach(function (d) {
+                const opt = document.createElement('option');
+                opt.value = d.id;
+                opt.textContent = d.name + ' (' + d.id + ')';
+                sel.appendChild(opt);
+            });
+        }
+        function runDecoderTest() {
+            const resultEl = document.getElementById('testDecoderResult');
+            if (!resultEl) return;
+            if (!window.RBTDecoders) {
+                resultEl.textContent = 'Error: RBTDecoders not loaded.';
+                resultEl.style.background = '#ffebee';
+                return;
+            }
+            const decoderId = document.getElementById('testDecoderSelect') && document.getElementById('testDecoderSelect').value;
+            const portInput = document.getElementById('testDecoderPort');
+            const port = portInput && portInput.value !== '' ? parseInt(portInput.value, 10) : undefined;
+            const hexRaw = (document.getElementById('testPayloadHex') && document.getElementById('testPayloadHex').value || '').trim();
+            const b64Raw = (document.getElementById('testPayloadBase64') && document.getElementById('testPayloadBase64').value || '').trim();
+
+            let base64Payload = '';
+            if (hexRaw) {
+                const bytes = hexToBytes(hexRaw);
+                if (!bytes) {
+                    resultEl.textContent = 'Error: Invalid hex. Use 0-9, A-F, spaces optional, even length.';
+                    resultEl.style.background = '#ffebee';
+                    return;
+                }
+                base64Payload = bytesToBase64(bytes);
+            } else if (b64Raw) {
+                try {
+                    atob(b64Raw.replace(/\s+/g, ''));
+                } catch (e) {
+                    resultEl.textContent = 'Error: Invalid base64.';
+                    resultEl.style.background = '#ffebee';
+                    return;
+                }
+                base64Payload = b64Raw.replace(/\s+/g, '');
+            } else {
+                resultEl.textContent = 'Enter payload as hex or base64.';
+                resultEl.style.background = '#fff8e1';
+                return;
+            }
+
+            const decoder = window.RBTDecoders.getDecoder(decoderId);
+            if (!decoder) {
+                resultEl.textContent = 'Error: Decoder "' + decoderId + '" not found.';
+                resultEl.style.background = '#ffebee';
+                return;
+            }
+
+            const message = { data: { data: base64Payload } };
+            if (typeof port === 'number' && !isNaN(port)) message.data.port = port;
+
+            try {
+                const out = decoder.decode(message);
+                const normalized = window.RBTDecoders.normalizeDecodedOutput(out);
+                resultEl.textContent = JSON.stringify(normalized, null, 2);
+                resultEl.style.background = '#e8f5e9';
+            } catch (e) {
+                resultEl.textContent = 'Exception: ' + (e && e.message ? e.message : String(e)) + '\n\n' + (e && e.stack ? e.stack : '');
+                resultEl.style.background = '#ffebee';
+            }
+        }
 
         function showStatus(kind, msg) {
             statusEl.className = 'status ' + (kind === 'ok' ? 'ok' : 'err');
@@ -447,6 +556,7 @@ ${helpers}
                 s.src = url;
                 s.onload = () => {
                     URL.revokeObjectURL(url);
+                    populateDecoderTesterDropdown();
                     const decs = (window.RBTDecoders && window.RBTDecoders.listDecoders) ? window.RBTDecoders.listDecoders() : [];
                     showStatus('ok', `Loaded into browser. Registered decoders now: ${decs.length}`);
                 };
@@ -481,7 +591,11 @@ ${helpers}
         document.getElementById('saveBtn').addEventListener('click', saveFromTextbox);
         document.getElementById('testBtn').addEventListener('click', testLoad);
         document.getElementById('refreshBtn').addEventListener('click', refreshList);
+        if (document.getElementById('runDecoderTestBtn')) {
+            document.getElementById('runDecoderTestBtn').addEventListener('click', runDecoderTest);
+        }
 
+        populateDecoderTesterDropdown();
         tableBody.addEventListener('click', (e) => {
             const btn = e.target.closest('button[data-action="delete"]');
             if (!btn) return;

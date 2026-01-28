@@ -219,14 +219,7 @@
                 </li>
                 <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
-                    <a href="downlinks.html">RadioBridge Downlinks</a>
-                </li>
-                <li class="item">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
-                        <path d="M22 2L11 13"></path>
-                        <path d="M22 2l-7 20-4-9-9-4 20-7z"></path>
-                    </svg>
-                    <a href="tools_downlinks.html">Downlink Tools</a>
+                    <a href="downlinks.html">Send Downlinks</a>
                 </li>
                 <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
@@ -249,6 +242,9 @@
             <div id="notification" style="display: none; position: fixed; top: 20px; right: 20px; background-color: #4caf50; color: white; padding: 15px 20px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 1000;"></div>
             <h2 class="section-title">Connect to MultiTech Gateway</h2>
             <div class="form-section">
+                <!-- Use both inline onsubmit and a JS event listener.
+                     Both call the same (overridden) global connectToBroker, so either path works
+                     even if one wiring mechanism fails on some browsers/environments. -->
                 <form id="connectForm" onsubmit="connectToBroker(event)">
                     <div class="form-group">
                         <label for="broker">MQTT Broker IP:</label>
@@ -401,52 +397,47 @@
         }
         
         // Remove duplicate messages based on fingerprint (keeps the oldest message for each fingerprint)
+        // Always iterate over ALL records via store.openCursor() so we catch records with no/missing fingerprint.
         async function removeDuplicates() {
             if (!db) await initDB();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([STORE_NAME], 'readwrite');
                 const store = transaction.objectStore(STORE_NAME);
-                
-                // Try to use fingerprint index, fall back to scanning all records
-                let index;
-                try {
-                    index = store.index('fingerprint');
-                } catch (e) {
-                    // Index doesn't exist, scan all records
-                    index = null;
-                }
-                
-                const fingerprints = new Map(); // fingerprint -> {id, time}
-                const duplicates = [];
-                
-                const request = index ? index.openCursor() : store.openCursor();
+                const fingerprints = new Map(); // fingerprint -> record to keep
+                const duplicates = []; // ids to delete
+
+                const request = store.openCursor();
                 request.onsuccess = (event) => {
                     const cursor = event.target.result;
                     if (cursor) {
                         const record = cursor.value;
                         let fingerprint = record.fingerprint;
-                        
-                        // If no fingerprint exists, generate one from the original message
-                        if (!fingerprint && record.original) {
-                            fingerprint = getMessageFingerprint(record.original);
-                            // Update the record with the fingerprint
+
+                        // If no fingerprint, generate from original message or fallback from record fields
+                        if (!fingerprint || typeof fingerprint !== 'string') {
+                            if (record.original) {
+                                fingerprint = getMessageFingerprint(record.original);
+                            } else {
+                                // Fallback: use time + deveui + decoded payload so identical cached rows dedupe
+                                fingerprint = `fallback|${record.time || ''}|${record.deveui || ''}|${JSON.stringify(record.decoded || {})}`;
+                            }
                             record.fingerprint = fingerprint;
-                            cursor.update(record);
+                            try {
+                                cursor.update(record);
+                            } catch (e) {
+                                console.warn('[Cache] Could not update fingerprint on record:', e);
+                            }
                         }
-                        
+
                         if (fingerprint) {
                             if (fingerprints.has(fingerprint)) {
-                                // This is a duplicate - keep the one with the earliest time
                                 const existing = fingerprints.get(fingerprint);
                                 const recordTime = new Date(record.time || record.cachedAt || 0).getTime();
                                 const existingTime = new Date(existing.time || existing.cachedAt || 0).getTime();
-                                
                                 if (recordTime < existingTime) {
-                                    // This record is older, keep it and delete the existing one
                                     duplicates.push(existing.id);
                                     fingerprints.set(fingerprint, record);
                                 } else {
-                                    // Existing record is older, delete this one
                                     duplicates.push(record.id);
                                 }
                             } else {
@@ -455,12 +446,9 @@
                         }
                         cursor.continue();
                     } else {
-                        // Delete duplicates (keep the oldest one for each fingerprint)
                         if (duplicates.length > 0) {
                             console.log(`[Cache] Removing ${duplicates.length} duplicate messages`);
-                            duplicates.forEach(id => {
-                                store.delete(id);
-                            });
+                            duplicates.forEach(id => store.delete(id));
                         }
                         resolve(duplicates.length);
                     }
@@ -1038,6 +1026,17 @@
                     }
                 }
             });
+
+            // Wire up connect form submit handler here so we are guaranteed
+            // to use the overridden connectToBroker implementation defined below.
+            const connectForm = document.getElementById('connectForm');
+            if (connectForm) {
+                connectForm.addEventListener('submit', (event) => {
+                    // Always prevent default form submission; let JS handle connect logic
+                    event.preventDefault();
+                    connectToBroker(event);
+                });
+            }
         });
 
         // Display cached messages with filtering
@@ -1144,147 +1143,53 @@
         fetchMessages = function(filter = '') {
             // Load custom decoders first so dropdown includes them
             loadCustomDecodersOnce().then(() => {
-            ensureDecoderUI(true);
-            fetch(`/messages?filter=${encodeURIComponent(filter)}`)
-                .then(response => response.json())
-                .then(data => {
-                    // Don't clear the table here - let displayCachedMessages handle it
-                    // This way cached messages remain visible even if no new messages arrive
-                    
-                    if (!data.messages) {
-                        // Error loading messages - just show cached ones
-                        console.warn('Error loading messages from server, showing cached messages');
-                        const filters = getActiveFilters();
-                        filters.search = filter || filters.search;
-                        displayCachedMessages(filters);
-                        return;
-                    }
-                    
-                    if (data.messages && data.messages.length > 0) {
-                        // We have new messages - cache them
-                        data.messages.reverse();
-                        // Cache all new messages (with deduplication)
-                        const cachePromises = data.messages.map(message => cacheMessage(message).catch(e => {
-                            console.warn('Failed to cache message:', e);
-                        }));
-                        Promise.all(cachePromises).then(() => {
-                            // Update cache stats after caching
-                            updateCacheStats();
-                            // Refresh display to show new messages
+                ensureDecoderUI(true);
+                fetch(`/messages?filter=${encodeURIComponent(filter)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Don't clear the table here - let displayCachedMessages handle it
+                        // This way cached messages remain visible even if no new messages arrive
+
+                        if (!data.messages) {
+                            // Error loading messages - just show cached ones
+                            console.warn('Error loading messages from server, showing cached messages');
                             const filters = getActiveFilters();
                             filters.search = filter || filters.search;
                             displayCachedMessages(filters);
-                        });
-                    } else {
-                        // No new messages from server, but show cached ones
+                            return;
+                        }
+
+                        if (data.messages && data.messages.length > 0) {
+                            // We have new messages - cache them
+                            data.messages.reverse();
+                            // Cache all new messages (with deduplication)
+                            const cachePromises = data.messages.map(message => cacheMessage(message).catch(e => {
+                                console.warn('Failed to cache message:', e);
+                            }));
+                            Promise.all(cachePromises).then(() => {
+                                // Update cache stats after caching
+                                updateCacheStats();
+                                // Refresh display to show new messages
+                                const filters = getActiveFilters();
+                                filters.search = filter || filters.search;
+                                displayCachedMessages(filters);
+                            });
+                        } else {
+                            // No new messages from server, but show cached ones
+                            const filters = getActiveFilters();
+                            filters.search = filter || filters.search;
+                            displayCachedMessages(filters);
+                        }
+                        // Always return after handling
+                        return;
+                    })
+                    .catch(error => {
+                        // Network error or other fetch failure - show cached messages
+                        console.warn('Failed to fetch messages from server:', error);
                         const filters = getActiveFilters();
                         filters.search = filter || filters.search;
                         displayCachedMessages(filters);
-                    }
-                    return; // Skip old rendering logic, use displayCachedMessages instead
-                })
-                .catch(error => {
-                    // Network error or other fetch failure - show cached messages
-                    console.warn('Failed to fetch messages from server:', error);
-                    const filters = getActiveFilters();
-                    filters.search = filter || filters.search;
-                    displayCachedMessages(filters);
-                });
-            });
-        };
-                    
-                    // OLD RENDERING CODE BELOW (now handled by displayCachedMessages)
-                    data.messages.forEach((message, index) => {
-                        const row = document.createElement('tr');
-                        const timeCell = document.createElement('td');
-                        const devEUICell = document.createElement('td');
-                        const topicCell = document.createElement('td');
-                        const messageTypeCell = document.createElement('td');
-                        const messageDataCell = document.createElement('td');
-                        const buttonCell = document.createElement('td');
-                        const moreInfoButton = document.createElement('button');
-                        moreInfoButton.className = 'action-button';
-                        buttonCell.style.textAlign = 'center';
-
-                        // Use current_time if available, otherwise use time (guard for non-object message.data)
-                        const dataObj = (message && message.data && typeof message.data === 'object') ? message.data : null;
-                        const time = (dataObj && (dataObj.current_time || dataObj.time)) || new Date().toISOString();
-                        timeCell.textContent = time;
-                        timeCell.style.textAlign = 'center';
-                        
-                        // Extract DevEUI (used for per-device decoder mapping)
-                        let devEui = getDevEuiFromMessage(message);
-                        devEUICell.textContent = devEui || 'N/A';
-                        devEUICell.style.textAlign = 'center';
-                        
-                        topicCell.textContent = message.topic.substring(message.topic.lastIndexOf('/') + 1);
-                        topicCell.style.textAlign = 'center';
-
-                        const decoderMap = loadDecoderMap();
-                        const defaultDecoderId = getDefaultDecoderId();
-                        const selectedDecoderId = (devEui && decoderMap[devEui]) ? decoderMap[devEui] : defaultDecoderId;
-
-                        // Decode on the client using the selected decoder (auto/per-device/default)
-                        const decodedResult = decodeMessageWithSelection(message, selectedDecoderId);
-                        messageTypeCell.textContent = decodedResult.eventType || 'N/A';
-                        messageTypeCell.style.textAlign = 'center';
-                        messageDataCell.textContent = JSON.stringify(decodedResult.decoded, null, 1);
-                        messageDataCell.style.textAlign = 'left';
-                        messageDataCell.style.fontFamily = 'monospace';
-                        messageDataCell.style.fontSize = '12px';
-
-                        // Actions: per-row decoder select + Full JSON
-                        const actionsWrap = document.createElement('div');
-                        actionsWrap.className = 'actions-wrap';
-
-                        const rowDecoderSelect = document.createElement('select');
-                        rowDecoderSelect.className = 'decoder-select';
-                        // If there's a per-device pin, show it; otherwise show default
-                        fillDecoderSelect(rowDecoderSelect, selectedDecoderId || 'auto');
-                        rowDecoderSelect.title = devEui ? `Decoder for ${devEui}` : 'Decoder (no DevEUI found)';
-
-                        rowDecoderSelect.addEventListener('change', function () {
-                            const val = this.value || 'auto';
-                            const map = loadDecoderMap();
-                            if (devEui) {
-                                if (val === 'auto') {
-                                    delete map[devEui];
-                                } else {
-                                    map[devEui] = val;
-                                }
-                                saveDecoderMap(map);
-                            } else {
-                                // No DevEUI -> treat as changing default
-                                setDefaultDecoderId(val);
-                                const defaultSelect = document.getElementById('defaultDecoder');
-                                if (defaultSelect) defaultSelect.value = val;
-                            }
-                            fetchMessages(document.getElementById('filter').value);
-                        });
-
-                        moreInfoButton.textContent = 'Full Json';
-                        moreInfoButton.onclick = () => showModal(message.data);
-
-                        actionsWrap.appendChild(rowDecoderSelect);
-                        actionsWrap.appendChild(moreInfoButton);
-                        buttonCell.appendChild(actionsWrap);
-
-                        row.appendChild(timeCell);
-                        row.appendChild(devEUICell);
-                        row.appendChild(topicCell);
-                        row.appendChild(messageTypeCell);
-                        row.appendChild(messageDataCell);
-                        row.appendChild(buttonCell);
-                        messageTable.appendChild(row);
                     });
-                })
-                .catch(error => {
-                    // Network error or other fetch failure - show cached messages instead of error
-                    console.warn('Failed to fetch messages from server:', error);
-                    const filters = getActiveFilters();
-                    filters.search = filter || filters.search;
-                    displayCachedMessages(filters);
-                });
             });
         };
 

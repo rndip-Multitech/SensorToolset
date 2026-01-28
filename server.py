@@ -13,6 +13,9 @@ import json
 import logging
 import os
 import argparse
+import urllib.request
+import urllib.error
+import ssl
 
 """
 Creating the Flask app and setting the template and static directories.
@@ -159,9 +162,76 @@ def connect_route():
 
 @app.route('/get_sensors', methods=['GET'])
 def get_sensors_route():
-    """Return the list of discovered sensors from MQTT uplinks."""
+    """Return the list of discovered sensors from MQTT uplinks.
+    If the discovery list is empty, derive DevEUIs from the message buffer so
+    downlink pages still show devices that have sent uplinks."""
     sensors = get_sensors()
+    if not sensors and MQTT_AVAILABLE:
+        try:
+            messages = get_messages()
+            seen = {s["DevEUI"] for s in sensors}
+            for msg in messages:
+                if msg.get("type") == "json" and isinstance(msg.get("data"), dict):
+                    dev_eui = msg["data"].get("deveui")
+                    if dev_eui and dev_eui not in seen:
+                        seen.add(dev_eui)
+                        sensors.append({"DevEUI": dev_eui, "sensor_type": "Other"})
+        except Exception as e:
+            logger.warning(f"Fallback sensor list from messages: {e}")
     return jsonify({"sensors": sensors}), 200
+
+
+def _normalize_dev_eui(entry):
+    """Extract DevEUI from a session/device object (various API shapes)."""
+    if not isinstance(entry, dict):
+        return None
+    for key in ("deveui", "DevEUI", "dev_eui", "devEUI"):
+        val = entry.get(key)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+@app.route('/api/network_sessions', methods=['GET'])
+def network_sessions_route():
+    """Fetch connected sessions/devices from the gateway's LoRa network server API.
+    Uses http://localhost/api/lora/sessions (MultiTech mPower format).
+    Returns { devices: [ { DevEUI: "...", last_seen: "..." } ] } for the downlinks device dropdown."""
+    url = "http://localhost/api/lora/sessions"
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            data = json.loads(body) if body.strip() else {}
+    except urllib.error.HTTPError as e:
+        logger.warning(f"Network server API error {e.code}: {url}")
+        return jsonify({"devices": [], "error": f"API returned {e.code}"}), 200
+    except urllib.error.URLError as e:
+        logger.warning(f"Network server API unreachable: {url} - {e}")
+        return jsonify({"devices": [], "error": str(e.reason) if getattr(e, "reason", None) else str(e)}), 200
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Network server API invalid JSON: {e}")
+        return jsonify({"devices": [], "error": "Invalid JSON response"}), 200
+    # MultiTech mPower format: { "code": 200, "result": [...], "status": "success" }
+    items = []
+    if isinstance(data, dict):
+        items = data.get("result") or data.get("sessions") or data.get("devices") or []
+    elif isinstance(data, list):
+        items = data
+    if not isinstance(items, list):
+        items = []
+    devices = []
+    seen = set()
+    for entry in items:
+        dev_eui = _normalize_dev_eui(entry) if isinstance(entry, dict) else None
+        if dev_eui and dev_eui not in seen:
+            seen.add(dev_eui)
+            last_seen = entry.get("last_seen", "") if isinstance(entry, dict) else ""
+            devices.append({"DevEUI": dev_eui, "last_seen": last_seen})
+    return jsonify({"devices": devices}), 200
 
 
 @app.route('/messages', methods=['GET'])
