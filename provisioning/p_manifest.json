@@ -7,7 +7,8 @@
     { "FileName": "python3-multiprocessing_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-multiprocessing"},
     { "FileName": "python3-mmap_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-mmap"},
     { "FileName": "python3-distutils_3.10.15-r0.0_cortexa7t2hf-neon.ipk", "type": "ipk", "PkgName": "python3-distutils"}
-  ]
+   
+  ] 
 }
 
 

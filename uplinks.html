@@ -103,6 +103,39 @@
             font-weight: bold;
         }
 
+        .data-box {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin: 6px 0;
+            background: #ffffff;
+        }
+
+        .data-box.decoded {
+            background: #e8f5e9;
+            border-color: #c8e6c9;
+        }
+
+        .data-box.raw {
+            background: #fff8e1;
+            border-color: #ffe0b2;
+        }
+
+        .data-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #00394d;
+            margin-bottom: 6px;
+        }
+
+        .data-pre {
+            white-space: pre-wrap;
+            margin: 0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+
         button.action-button {
             padding: 6px 12px;
             margin: 2px;
@@ -226,6 +259,12 @@
                     <a href="decoders.html">Decoders</a>
                 </li>
                 <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <a href="cloud_integrations.html">Cloud Integrations</a>
+                </li>
+                <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
                     <a href="radiobridge.html">RadioBridge Config</a>
                 </li>
@@ -269,10 +308,11 @@
             <div class="filter-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <h3 style="margin: 0; color: #00394d;">Filters & Cache</h3>
-                    <div style="display: flex; gap: 8px;">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="action-button" id="uploadHistoryBtn" title="Import packet history from gateway JSON export">Import history</button>
+                        <input type="file" id="uploadHistoryInput" accept=".json,application/json" style="display: none;">
                         <button type="button" class="action-button" id="downloadCSVBtn">Download CSV</button>
                         <button type="button" class="action-button" id="downloadJSONBtn">Download JSON</button>
-                        <button type="button" class="action-button" id="removeDuplicatesBtn">Remove Duplicates</button>
                         <button type="button" class="action-button" id="clearCacheBtn">Clear Cache</button>
                     </div>
                 </div>
@@ -285,7 +325,9 @@
                 
                 <div class="form-group" style="margin-bottom: 10px;">
                     <label for="filterDevEui" style="min-width: 120px;">DevEUI:</label>
-                    <input type="text" id="filterDevEui" name="filterDevEui" placeholder="Filter by DevEUI..." style="flex: 1; max-width: none;">
+                    <select id="filterDevEui" name="filterDevEui" class="decoder-select" style="flex: 1; max-width: none;" title="Filter to a single DevEUI (populated from cached messages)">
+                        <option value="">-- All devices --</option>
+                    </select>
                 </div>
                 
                 <div class="form-group" style="margin-bottom: 10px;">
@@ -298,6 +340,18 @@
                     <input type="datetime-local" id="filterDateFrom" name="filterDateFrom" style="flex: 1; max-width: 300px;">
                     <label for="filterDateTo" style="min-width: 80px; margin-left: 12px;">To:</label>
                     <input type="datetime-local" id="filterDateTo" name="filterDateTo" style="flex: 1; max-width: 300px;">
+                </div>
+
+                <div class="form-group" style="margin-top: 12px;">
+                    <label for="viewMode">View:</label>
+                    <select id="viewMode" class="decoder-select" title="How to display message data">
+                        <option value="decoded">Decoded</option>
+                        <option value="raw">Raw</option>
+                        <option value="both">Both</option>
+                    </select>
+                    <span style="color:#666; font-size: 12px;">
+                        Decoded = human-readable fields. Raw = payload hex/base64 + metadata.
+                    </span>
                 </div>
                 
                 <div class="form-group" style="margin-top: 12px;">
@@ -356,6 +410,7 @@
 
         const DECODER_MAP_KEY = 'rbt_decoder_map_by_deveui';
         const DEFAULT_DECODER_KEY = 'rbt_default_decoder_id';
+        const VIEW_MODE_KEY = 'rbt_uplinks_view_mode';
         let customDecodersLoaded = false;
         let lastCustomDecoderLoadReport = null;
         
@@ -610,7 +665,7 @@
                         }
                         
                         if (filters.deveui && filters.deveui.trim()) {
-                            if (!msg.deveui || !msg.deveui.toLowerCase().includes(filters.deveui.toLowerCase())) {
+                            if (!msg.deveui || msg.deveui.toLowerCase() !== filters.deveui.toLowerCase()) {
                                 include = false;
                             }
                         }
@@ -683,6 +738,62 @@
                 console.error('Failed to get cache stats:', e);
             }
         }
+
+        async function getCachedDevEUIs(limit = 500) {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                let index;
+                try {
+                    index = store.index('deveui');
+                } catch (e) {
+                    resolve([]);
+                    return;
+                }
+                const request = index.openCursor();
+                const set = new Set();
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        const v = cursor.value;
+                        const d = v && v.deveui ? String(v.deveui) : '';
+                        if (d) set.add(d);
+                        if (set.size >= limit) {
+                            resolve(Array.from(set).sort());
+                            return;
+                        }
+                        cursor.continue();
+                    } else {
+                        resolve(Array.from(set).sort());
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function refreshDevEuiDropdown(keepSelection = true) {
+            const sel = document.getElementById('filterDevEui');
+            if (!sel) return;
+            const prev = keepSelection ? (sel.value || '') : '';
+            try {
+                const devs = await getCachedDevEUIs();
+                sel.innerHTML = '';
+                const optAll = document.createElement('option');
+                optAll.value = '';
+                optAll.textContent = '-- All devices --';
+                sel.appendChild(optAll);
+                devs.forEach((d) => {
+                    const opt = document.createElement('option');
+                    opt.value = d;
+                    opt.textContent = d;
+                    sel.appendChild(opt);
+                });
+                if (prev) sel.value = prev;
+            } catch (e) {
+                console.warn('DevEUI dropdown refresh failed:', e);
+            }
+        }
         
         // Download messages as CSV
         async function downloadCSV() {
@@ -753,7 +864,117 @@
                 alert('Error downloading JSON: ' + e);
             }
         }
-        
+
+        // Normalize an uploaded JSON item (gateway history or our export) to message shape for cacheMessage
+        function normalizeUploadedItemToMessage(item) {
+            if (!item || typeof item !== 'object') return null;
+            // Our download format: { time, deveui, topic, eventType, decoded, original } — original is { type, topic, data }
+            if (item.original && item.original.topic) {
+                const msg = item.original;
+                const data = msg.data && typeof msg.data === 'object' ? msg.data : (msg.payload || {});
+                return { type: msg.type || 'json', topic: msg.topic, data: data };
+            }
+            // Gateway history format: no topic; has deveui, direction, data (base64), created_at/trx_time
+            // Only import uplinks (direction === "up") for the uplinks page
+            if (item.deveui != null && (item.direction === 'up' || item.direction == null) && (item.data != null || item.created_at != null)) {
+                const deveui = String(item.deveui).trim();
+                if (!deveui) return null;
+                const topic = 'lora/' + deveui.replace(/-/g, '') + '/up';
+                const time = item.created_at ?? item.trx_time ?? item.time ?? new Date().toISOString();
+                const data = {
+                    deveui: deveui,
+                    time: time,
+                    current_time: time,
+                    data: typeof item.data === 'string' ? item.data : (item.data || ''),
+                    port: item.port != null ? item.port : undefined,
+                    rssi: item.rssi != null ? item.rssi : undefined,
+                    snr: item.snr != null ? item.snr : undefined,
+                    freq: item.frequency != null ? item.frequency : (item.freq != null ? item.freq : undefined),
+                    dr: item.datarate ?? item.dr,
+                    datarate: item.datarate,
+                    gweui: item.gweui,
+                    dev_addr: item.dev_addr,
+                    tmst: item.tmst
+                };
+                return { type: 'json', topic: topic, data: data };
+            }
+            // Gateway / flat with topic: { topic, data, deveui, time, ... } or { topic, payload, ... }
+            if (item.topic) {
+                const data = item.data && typeof item.data === 'object' ? item.data : {};
+                const flat = {
+                    topic: item.topic,
+                    deveui: item.deveui ?? data.deveui,
+                    time: item.time ?? data.time ?? item.current_time ?? data.current_time ?? item.created_at ?? item.trx_time,
+                    data: item.data ?? data.data ?? item.payload ?? data.payload,
+                    port: item.port ?? data.port,
+                    rssi: item.rssi ?? data.rssi,
+                    snr: item.snr ?? data.snr,
+                    freq: item.freq ?? data.freq ?? item.frequency,
+                    data_decoded: item.data_decoded ?? data.data_decoded
+                };
+                if (typeof item.data === 'string') flat.data = item.data;
+                if (typeof data.data === 'string') flat.data = data.data;
+                return { type: 'json', topic: item.topic, data: flat };
+            }
+            // Single payload object with topic nested
+            if (item.payload && typeof item.payload === 'object' && (item.payload.topic || item.payload.deveui)) {
+                return { type: 'json', topic: item.payload.topic || ('lora/' + (item.payload.deveui || '').replace(/-/g, '') + '/up'), data: item.payload };
+            }
+            return null;
+        }
+
+        async function importHistoryFromFile(file) {
+            if (!file || !file.name) return;
+            try {
+                const text = await new Promise((resolve, reject) => {
+                    const r = new FileReader();
+                    r.onload = () => resolve(r.result);
+                    r.onerror = () => reject(r.error);
+                    r.readAsText(file, 'utf-8');
+                });
+                const parsed = JSON.parse(text);
+                let items = Array.isArray(parsed) ? parsed : [];
+                if (!Array.isArray(parsed) && typeof parsed === 'object') {
+                    if (Array.isArray(parsed.packets)) items = parsed.packets;
+                    else if (Array.isArray(parsed.messages)) items = parsed.messages;
+                    else if (Array.isArray(parsed.history)) items = parsed.history;
+                    else if (Array.isArray(parsed.uplinks)) items = parsed.uplinks;
+                    else items = [parsed];
+                }
+                if (items.length === 0) {
+                    alert('No packets found in file. Expected a JSON array or object with "packets", "messages", or "history".');
+                    return;
+                }
+                const countBefore = await getCacheStats();
+                let skipped = 0;
+                for (const item of items) {
+                    const message = normalizeUploadedItemToMessage(item);
+                    if (!message) { skipped++; continue; }
+                    try {
+                        await cacheMessage(message);
+                    } catch (e) {
+                        console.warn('Import skip message:', e);
+                        skipped++;
+                    }
+                }
+                const countAfter = await getCacheStats();
+                const added = Math.max(0, countAfter - countBefore);
+                await updateCacheStats();
+                await refreshDevEuiDropdown(false);
+                displayCachedMessages(getActiveFilters());
+                const msg = added > 0
+                    ? `Imported ${added} new packet(s) into cache (${items.length} in file).${skipped > 0 ? ` ${skipped} skipped (invalid).` : ''}`
+                    : items.length - skipped > 0
+                        ? `All ${items.length - skipped} packet(s) were duplicates; no new messages added.`
+                        : `No packets imported.${skipped > 0 ? ` ${skipped} skipped (invalid).` : ''}`;
+                if (typeof showNotification === 'function') showNotification(msg);
+                else alert(msg);
+            } catch (e) {
+                console.error('Import history error:', e);
+                alert('Failed to import file: ' + (e.message || e));
+            }
+        }
+
         // Get active filters from UI
         function getActiveFilters() {
             return {
@@ -763,6 +984,86 @@
                 dateFrom: document.getElementById('filterDateFrom').value || '',
                 dateTo: document.getElementById('filterDateTo').value || ''
             };
+        }
+
+        function getViewMode() {
+            const el = document.getElementById('viewMode');
+            const v = (el && el.value) ? String(el.value) : (localStorage.getItem(VIEW_MODE_KEY) || 'decoded');
+            return (v === 'raw' || v === 'both' || v === 'decoded') ? v : 'decoded';
+        }
+
+        function setViewMode(mode) {
+            const v = (mode === 'raw' || mode === 'both' || mode === 'decoded') ? mode : 'decoded';
+            localStorage.setItem(VIEW_MODE_KEY, v);
+            const el = document.getElementById('viewMode');
+            if (el) el.value = v;
+        }
+
+        function extractRawInfo(message) {
+            const dataObj = (message && message.data && typeof message.data === 'object') ? message.data : {};
+            let payloadBase64 = '';
+            if (window.RBTDecoders && window.RBTDecoders.helpers && window.RBTDecoders.helpers.extractBase64Payload) {
+                payloadBase64 = window.RBTDecoders.helpers.extractBase64Payload(message) || '';
+            } else if (typeof dataObj.data === 'string') {
+                payloadBase64 = dataObj.data;
+            }
+
+            let payloadHex = '';
+            try {
+                if (window.RBTDecoders && window.RBTDecoders.helpers && window.RBTDecoders.helpers.base64ToBytes && window.RBTDecoders.helpers.bytesToHex) {
+                    const bytes = window.RBTDecoders.helpers.base64ToBytes(payloadBase64);
+                    if (bytes) payloadHex = window.RBTDecoders.helpers.bytesToHex(bytes);
+                }
+            } catch {
+                payloadHex = '';
+            }
+
+            // Port (fPort) best-effort across formats
+            const port =
+                (typeof dataObj.port === 'number' ? dataObj.port :
+                (dataObj.uplink_message && typeof dataObj.uplink_message.f_port === 'number' ? dataObj.uplink_message.f_port :
+                (typeof dataObj.fport === 'number' ? dataObj.fport : null)));
+
+            return {
+                payload_base64: payloadBase64,
+                payload_hex: payloadHex,
+                port: port,
+                rssi: (dataObj && dataObj.rssi !== undefined) ? dataObj.rssi : null,
+                snr: (dataObj && dataObj.snr !== undefined) ? dataObj.snr : null,
+                freq: (dataObj && dataObj.freq !== undefined) ? dataObj.freq : null,
+                dr: (dataObj && dataObj.dr !== undefined) ? dataObj.dr : null,
+            };
+        }
+
+        function renderMessageDataCell(messageDataCell, originalMessage, decodedResult) {
+            const viewMode = getViewMode();
+            const decoded = decodedResult && decodedResult.decoded ? decodedResult.decoded : {};
+            const rawInfo = extractRawInfo(originalMessage);
+
+            messageDataCell.innerHTML = '';
+
+            function addBox(kind, title, obj) {
+                const box = document.createElement('div');
+                box.className = 'data-box ' + kind;
+                const t = document.createElement('div');
+                t.className = 'data-title';
+                t.textContent = title;
+                const pre = document.createElement('pre');
+                pre.className = 'data-pre';
+                pre.textContent = JSON.stringify(obj || {}, null, 2);
+                box.appendChild(t);
+                box.appendChild(pre);
+                messageDataCell.appendChild(box);
+            }
+
+            if (viewMode === 'decoded') {
+                addBox('decoded', 'Decoded', decoded);
+            } else if (viewMode === 'raw') {
+                addBox('raw', 'Raw payload', rawInfo);
+            } else {
+                addBox('decoded', 'Decoded', decoded);
+                addBox('raw', 'Raw payload', rawInfo);
+            }
         }
         
         // Apply filters and refresh display
@@ -979,6 +1280,7 @@
                 await updateCacheStats();
                 // Load cached messages on page load
                 displayCachedMessages(getActiveFilters());
+                refreshDevEuiDropdown(true);
             } catch (e) {
                 console.error('Failed to initialize IndexedDB:', e);
             }
@@ -988,31 +1290,40 @@
             
             // Set up filter event listeners
             document.getElementById('filter').addEventListener('keyup', () => applyFilters());
-            document.getElementById('filterDevEui').addEventListener('input', () => applyFilters());
+            document.getElementById('filterDevEui').addEventListener('change', () => applyFilters());
             document.getElementById('filterEventType').addEventListener('input', () => applyFilters());
             document.getElementById('filterDateFrom').addEventListener('change', () => applyFilters());
             document.getElementById('filterDateTo').addEventListener('change', () => applyFilters());
+
+                // View mode (decoded/raw/both)
+                const viewModeEl = document.getElementById('viewMode');
+                if (viewModeEl) {
+                    const saved = localStorage.getItem(VIEW_MODE_KEY) || 'decoded';
+                    setViewMode(saved);
+                    viewModeEl.addEventListener('change', () => {
+                        setViewMode(viewModeEl.value);
+                        applyFilters();
+                    });
+                }
             
             // Set up download buttons
             document.getElementById('downloadCSVBtn').addEventListener('click', downloadCSV);
             document.getElementById('downloadJSONBtn').addEventListener('click', downloadJSON);
-            
-            // Set up remove duplicates button
-            document.getElementById('removeDuplicatesBtn').addEventListener('click', async () => {
-                try {
-                    const removed = await removeDuplicates();
-                    await updateCacheStats();
-                    displayCachedMessages(getActiveFilters());
-                    if (removed > 0) {
-                        showNotification(`Removed ${removed} duplicate messages`);
-                    } else {
-                        showNotification('No duplicates found');
+
+            // Import history: button opens file picker; on file chosen, import and refresh
+            const uploadHistoryBtn = document.getElementById('uploadHistoryBtn');
+            const uploadHistoryInput = document.getElementById('uploadHistoryInput');
+            if (uploadHistoryBtn && uploadHistoryInput) {
+                uploadHistoryBtn.addEventListener('click', () => uploadHistoryInput.click());
+                uploadHistoryInput.addEventListener('change', function () {
+                    const file = this.files && this.files[0];
+                    if (file) {
+                        importHistoryFromFile(file);
+                        this.value = '';
                     }
-                } catch (e) {
-                    alert('Error removing duplicates: ' + e);
-                }
-            });
-            
+                });
+            }
+
             // Set up clear cache button
             document.getElementById('clearCacheBtn').addEventListener('click', async () => {
                 if (confirm('Clear all cached messages? This cannot be undone.')) {
@@ -1020,6 +1331,7 @@
                         await clearCache();
                         await updateCacheStats();
                         displayCachedMessages(getActiveFilters());
+                        await refreshDevEuiDropdown(false);
                         alert('Cache cleared successfully.');
                     } catch (e) {
                         alert('Error clearing cache: ' + e);
@@ -1084,10 +1396,8 @@
                     
                     messageTypeCell.textContent = decodedResult.eventType || 'N/A';
                     messageTypeCell.style.textAlign = 'center';
-                    messageDataCell.textContent = JSON.stringify(decodedResult.decoded || {}, null, 1);
+                    renderMessageDataCell(messageDataCell, msg.original, decodedResult);
                     messageDataCell.style.textAlign = 'left';
-                    messageDataCell.style.fontFamily = 'monospace';
-                    messageDataCell.style.fontSize = '12px';
                     
                     // Actions: per-row decoder select + Full JSON
                     const actionsWrap = document.createElement('div');
@@ -1116,7 +1426,7 @@
                         applyFilters(); // Refresh display with new decoder
                     });
                     
-                    moreInfoButton.textContent = 'Full Json';
+                    moreInfoButton.textContent = 'Raw JSON';
                     moreInfoButton.onclick = () => showModal(msg.original.data || msg.original);
                     
                     actionsWrap.appendChild(rowDecoderSelect);
@@ -1169,6 +1479,7 @@
                             Promise.all(cachePromises).then(() => {
                                 // Update cache stats after caching
                                 updateCacheStats();
+                                refreshDevEuiDropdown(true);
                                 // Refresh display to show new messages
                                 const filters = getActiveFilters();
                                 filters.search = filter || filters.search;

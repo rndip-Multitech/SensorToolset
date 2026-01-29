@@ -24,6 +24,10 @@ RadioBridgeTools/
 
 ## Installation
 
+**Offline (no internet on gateway):** See [OFFLINE_INSTALL.md](OFFLINE_INSTALL.md) for building a self-contained binary on a Linux build machine and deploying it to the gateway without Python/pip, or for installing from source using offline pip (wheels).
+
+**Standard (gateway has internet):**
+
 1. Package the application directory into a tar.gz file
 2. Upload to the gateway via the mPower web interface
 3. The app-manager will automatically:

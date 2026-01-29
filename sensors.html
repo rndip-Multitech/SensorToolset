@@ -47,6 +47,105 @@
             color: #333;
             font-weight: bold;
         }
+
+        .device-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-weight: bold;
+            font-size: 12px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+        .device-status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .device-status-active {
+            background: #e8f5e9;
+            border-color: #c8e6c9;
+            color: #1b5e20;
+        }
+        .device-status-active .device-status-dot { background: #4caf50; }
+        .device-status-missed {
+            background: #fff8e1;
+            border-color: #ffe0b2;
+            color: #e65100;
+        }
+        .device-status-missed .device-status-dot { background: #ff9800; }
+        .device-status-offline {
+            background: #ffebee;
+            border-color: #ffcdd2;
+            color: #b71c1c;
+        }
+        .device-status-offline .device-status-dot { background: #f44336; }
+
+        .quick-range {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .quick-range button {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            color: #00394d;
+        }
+        .quick-range button:hover {
+            background: #f5f5f5;
+        }
+        .quick-range button.active {
+            background: #00394d;
+            color: white;
+            border-color: #00394d;
+        }
+
+        .rf-quality-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 10px 0 0;
+        }
+        .rf-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid #e0e0e0;
+            background: #fafafa;
+            font-size: 12px;
+            color: #00394d;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .rf-bars {
+            display: inline-flex;
+            gap: 3px;
+            align-items: flex-end;
+            height: 14px;
+        }
+        .rf-bars span {
+            width: 4px;
+            border-radius: 2px;
+            background: #ddd;
+            display: inline-block;
+        }
+        .rf-bars span.on { background: #4caf50; }
+        .rf-bars span.warn { background: #ff9800; }
+        .rf-bars span.bad { background: #f44336; }
+        .rf-hint {
+            font-weight: normal;
+            color: #666;
+        }
         .status-indicator-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -235,6 +334,12 @@
                     <a href="decoders.html">Decoders</a>
                 </li>
                 <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <a href="cloud_integrations.html">Cloud Integrations</a>
+                </li>
+                <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
                     <a href="radiobridge.html">RadioBridge Config</a>
                 </li>
@@ -275,6 +380,13 @@
                         <label for="dateTo" style="font-size: 12px; color: #666;">To:</label>
                         <input type="datetime-local" id="dateTo" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
                     </div>
+                    <div class="quick-range" aria-label="Quick date ranges">
+                        <button type="button" id="range1h">1h</button>
+                        <button type="button" id="range24h">24h</button>
+                        <button type="button" id="range7d">7d</button>
+                        <button type="button" id="range30d">30d</button>
+                        <button type="button" id="rangeAll">All</button>
+                    </div>
                     <button type="button" id="clearDateFilter" style="padding: 6px 12px; background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 14px;">Clear Filter</button>
                 </div>
             </div>
@@ -290,6 +402,7 @@
     <script src="NetworkDashboard-0.1/static/js/decoders/radiobridge.js"></script>
     <script src="NetworkDashboard-0.1/static/js/decoders/sensative_strips.js"></script>
     <script src="NetworkDashboard-0.1/static/js/decoders/raw.js"></script>
+    <script src="NetworkDashboard-0.1/static/js/rf_health.js"></script>
     <script>
         // IndexedDB setup
         let db = null;
@@ -300,6 +413,113 @@
         let autoRefreshInterval = null;
         let currentDevEUI = null;
         let dateFilter = { from: null, to: null };
+        let activeQuickRange = ''; // '1h'|'24h'|'7d'|'30d'|'all'|''
+
+        function toDatetimeLocalValue(date) {
+            const pad = (n) => String(n).padStart(2, '0');
+            const yyyy = date.getFullYear();
+            const mm = pad(date.getMonth() + 1);
+            const dd = pad(date.getDate());
+            const hh = pad(date.getHours());
+            const mi = pad(date.getMinutes());
+            return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+        }
+
+        function setQuickRange(rangeId) {
+            activeQuickRange = rangeId || '';
+            const now = new Date();
+            let from = null;
+            let to = null;
+            if (rangeId === '1h') from = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+            else if (rangeId === '24h') from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            else if (rangeId === '7d') from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            else if (rangeId === '30d') from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            else if (rangeId === 'all') {
+                from = null;
+                to = null;
+            }
+
+            const fromEl = document.getElementById('dateFrom');
+            const toEl = document.getElementById('dateTo');
+            if (fromEl) fromEl.value = from ? toDatetimeLocalValue(from) : '';
+            if (toEl) toEl.value = to ? toDatetimeLocalValue(to) : '';
+
+            dateFilter.from = from;
+            dateFilter.to = to;
+
+            updateQuickRangeButtons();
+            if (currentDevEUI) renderSensorDashboard(currentDevEUI);
+        }
+
+        function updateQuickRangeButtons() {
+            const map = [
+                ['1h', 'range1h'],
+                ['24h', 'range24h'],
+                ['7d', 'range7d'],
+                ['30d', 'range30d'],
+                ['all', 'rangeAll'],
+            ];
+            map.forEach(([id, elId]) => {
+                const btn = document.getElementById(elId);
+                if (!btn) return;
+                btn.classList.toggle('active', activeQuickRange === id);
+            });
+        }
+
+        function median(nums) {
+            const arr = nums.filter((n) => typeof n === 'number' && isFinite(n)).slice().sort((a, b) => a - b);
+            if (!arr.length) return null;
+            const mid = Math.floor(arr.length / 2);
+            return arr.length % 2 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
+        }
+
+        function computeDeviceStatus(allMessages) {
+            if (!allMessages || !allMessages.length) {
+                return { status: 'offline', label: 'Offline', detail: 'No messages' };
+            }
+            const times = allMessages
+                .map((m) => new Date(m.time).getTime())
+                .filter((t) => !isNaN(t))
+                .sort((a, b) => b - a);
+            const lastSeenMs = times[0];
+            const nowMs = Date.now();
+            const ageSec = Math.max(0, (nowMs - lastSeenMs) / 1000);
+
+            // Estimate typical interval from last ~10 uplinks
+            const intervals = [];
+            for (let i = 0; i < Math.min(10, times.length - 1); i++) {
+                const dt = (times[i] - times[i + 1]) / 1000;
+                if (dt > 0) intervals.push(dt);
+            }
+            const typical = median(intervals) || 3600; // default 1h
+            const activeThresh = Math.max(180, typical * 2); // at least 3 min
+            const missedThresh = Math.max(activeThresh * 3, typical * 5);
+
+            if (ageSec <= activeThresh) return { status: 'active', label: 'Active', detail: `Last seen ${Math.round(ageSec / 60)}m ago` };
+            if (ageSec <= missedThresh) return { status: 'missed', label: 'Missed uplinks', detail: `Last seen ${Math.round(ageSec / 60)}m ago` };
+            return { status: 'offline', label: 'Offline', detail: `Last seen ${Math.round(ageSec / 3600)}h ago` };
+        }
+
+        function renderBars(count, level) {
+            const bars = [];
+            const cls = level === 'good' ? 'on' : level === 'ok' ? 'warn' : 'bad';
+            for (let i = 1; i <= 5; i++) {
+                const h = 6 + i * 2; // 8..16px
+                const on = i <= count;
+                bars.push(`<span class="${on ? cls : ''}" style="height:${h}px"></span>`);
+            }
+            return `<span class="rf-bars" aria-label="signal bars">${bars.join('')}</span>`;
+        }
+
+        function computeRfSummary(allMessages) {
+            // Use best-of last ~20 messages (best RSSI is max (closest to 0), best SNR is max)
+            const recent = (allMessages || []).slice(0, 20);
+            const rssis = recent.map(m => m.original && m.original.data ? m.original.data.rssi : undefined).filter(v => typeof v === 'number');
+            const snrs = recent.map(m => m.original && m.original.data ? m.original.data.snr : undefined).filter(v => typeof v === 'number');
+            const rssi = rssis.length ? Math.max(...rssis) : null;
+            const snr = snrs.length ? Math.max(...snrs) : null;
+            return { rssi, snr };
+        }
 
         function initDB() {
             return new Promise((resolve, reject) => {
@@ -611,13 +831,97 @@
 
         function extractSignalData(message) {
             const signal = {};
-            const data = message.original && message.original.data;
-            if (data && typeof data === 'object') {
-                if (typeof data.rssi === 'number') signal.rssi = data.rssi;
-                if (typeof data.snr === 'number') signal.snr = data.snr;
-                if (typeof data.signal_rssi === 'number') signal.rssi = data.signal_rssi;
-                if (typeof data.signal_snr === 'number') signal.snr = data.signal_snr;
+
+            function asNumber(v) {
+                if (typeof v === 'number' && Number.isFinite(v)) return v;
+                if (typeof v === 'string') {
+                    const n = parseFloat(v.trim());
+                    if (Number.isFinite(n)) return n;
+                }
+                return null;
             }
+
+            function bestOf(nums) {
+                const cleaned = (nums || []).map(asNumber).filter(n => n !== null);
+                if (!cleaned.length) return undefined;
+                // “Best” RSSI/SNR is the maximum (closest to 0 dBm / highest dB)
+                return Math.max(...cleaned);
+            }
+
+            const data = message.original && message.original.data;
+            const rssiCandidates = [];
+            const snrCandidates = [];
+
+            // 1) Direct fields on the raw uplink (MultiTech / generic)
+            if (data && typeof data === 'object') {
+                rssiCandidates.push(data.rssi, data.signal_rssi, data.gw_rssi, data.gateway_rssi, data.rssis);
+                snrCandidates.push(data.snr, data.signal_snr, data.gw_snr, data.gateway_snr, data.lsnr);
+
+                // 2) TTN v3 style: uplink_message.rx_metadata[]
+                const rxmd = data.uplink_message && Array.isArray(data.uplink_message.rx_metadata) ? data.uplink_message.rx_metadata : null;
+                if (rxmd) {
+                    rxmd.forEach(m => {
+                        if (!m) return;
+                        rssiCandidates.push(m.rssi);
+                        // TTN uses lsnr (SNR) in dB
+                        snrCandidates.push(m.snr, m.lsnr);
+                    });
+                }
+
+                // 3) TTN v2 style: metadata.gateways[]
+                const gws = data.metadata && Array.isArray(data.metadata.gateways) ? data.metadata.gateways : null;
+                if (gws) {
+                    gws.forEach(g => {
+                        if (!g) return;
+                        rssiCandidates.push(g.rssi);
+                        snrCandidates.push(g.snr);
+                    });
+                }
+
+                // 4) ChirpStack style: rxInfo[] / rxInfo[0].loRaSNR
+                const rxInfo = Array.isArray(data.rxInfo) ? data.rxInfo : (Array.isArray(data.rxinfo) ? data.rxinfo : null);
+                if (rxInfo) {
+                    rxInfo.forEach(r => {
+                        if (!r) return;
+                        rssiCandidates.push(r.rssi);
+                        snrCandidates.push(r.snr, r.loRaSNR, r.loraSNR, r.loRaSnr, r.loraSnr);
+                    });
+                }
+
+                // 5) Generic shallow scan (in case the gateway nests these differently)
+                // Only scans a couple levels to avoid expensive recursion.
+                try {
+                    const queue = [{ obj: data, depth: 0 }];
+                    const maxDepth = 2;
+                    const rssiKeys = new Set(['rssi', 'signal_rssi', 'gw_rssi', 'gateway_rssi', 'rssis']);
+                    const snrKeys = new Set(['snr', 'signal_snr', 'gw_snr', 'gateway_snr', 'lsnr', 'lorasnr', 'lorasnr', 'lorasnr', 'lorasnr', 'lorasnr', 'lorasnr']);
+                    while (queue.length) {
+                        const { obj, depth } = queue.shift();
+                        if (!obj || typeof obj !== 'object') continue;
+                        Object.keys(obj).forEach(k => {
+                            const v = obj[k];
+                            const kl = String(k).toLowerCase();
+                            if (rssiKeys.has(kl)) rssiCandidates.push(v);
+                            if (snrKeys.has(kl) || kl.includes('snr')) snrCandidates.push(v);
+                            if (depth < maxDepth && v && typeof v === 'object') queue.push({ obj: v, depth: depth + 1 });
+                        });
+                    }
+                } catch (e) {
+                    // ignore scan errors
+                }
+            }
+
+            // 6) Fallback: some decoders include rssi/snr in decoded payload
+            const decoded = message.decoded && typeof message.decoded === 'object' ? message.decoded : null;
+            if (decoded) {
+                rssiCandidates.push(decoded.rssi, decoded.signal_rssi);
+                snrCandidates.push(decoded.snr, decoded.signal_snr);
+            }
+
+            const bestRssi = bestOf(rssiCandidates);
+            const bestSnr = bestOf(snrCandidates);
+            if (bestRssi !== undefined) signal.rssi = bestRssi;
+            if (bestSnr !== undefined) signal.snr = bestSnr;
             return signal;
         }
 
@@ -1375,13 +1679,25 @@
             const totalMessages = allMessages.length;
             const filteredMessages = messages.length;
             const dateFilterActive = dateFilter.from || dateFilter.to;
+            const status = computeDeviceStatus(allMessages);
+            const statusClass = status.status === 'active' ? 'device-status-active' : status.status === 'missed' ? 'device-status-missed' : 'device-status-offline';
+            const rf = computeRfSummary(allMessages);
+            const rssiQ = (window.RBTRFHealth && typeof rf.rssi === 'number') ? window.RBTRFHealth.rssiQuality(rf.rssi) : null;
+            const snrQ = (window.RBTRFHealth && typeof rf.snr === 'number') ? window.RBTRFHealth.snrQuality(rf.snr) : null;
+
             let html = `<div class="sensor-card">
                 <div class="sensor-header">
                     <h3>Sensor: ${deveui}</h3>
-                    <span style="color: #666; font-size: 14px;">
-                        ${dateFilterActive ? `${filteredMessages} of ${totalMessages} messages` : `${totalMessages} messages`}
-                        ${dateFilterActive ? ' (filtered)' : ''}
-                    </span>
+                    <div style="display:flex; gap: 12px; align-items:center; flex-wrap: wrap; justify-content: flex-end;">
+                        <span class="device-status-badge ${statusClass}" title="${status.detail}">
+                            <span class="device-status-dot"></span>
+                            ${status.label}
+                        </span>
+                        <span style="color: #666; font-size: 14px;">
+                            ${dateFilterActive ? `${filteredMessages} of ${totalMessages} messages` : `${totalMessages} messages`}
+                            ${dateFilterActive ? ' (filtered)' : ''}
+                        </span>
+                    </div>
                 </div>
                 <div class="sensor-info">
                     <div class="info-item">
@@ -1402,6 +1718,28 @@
                     </div>
                     ` : ''}
                 </div>`;
+
+            // RF health summary (simple, plain-English)
+            if (rssiQ || snrQ) {
+                html += `<div class="rf-quality-row">`;
+                if (rssiQ) {
+                    const bars = window.RBTRFHealth.rssiBars(rf.rssi);
+                    html += `<div class="rf-pill" title="${rssiQ.hint}">
+                        RSSI: ${rf.rssi} dBm
+                        ${renderBars(bars, rssiQ.level)}
+                        <span class="rf-hint">${rssiQ.label}</span>
+                    </div>`;
+                }
+                if (snrQ) {
+                    const bars = window.RBTRFHealth.snrBars(rf.snr);
+                    html += `<div class="rf-pill" title="${snrQ.hint}">
+                        SNR: ${rf.snr} dB
+                        ${renderBars(bars, snrQ.level)}
+                        <span class="rf-hint">${snrQ.label}</span>
+                    </div>`;
+                }
+                html += `</div>`;
+            }
 
             // Status Indicators Section (AT THE TOP)
             html += `<h4 style="margin-top: 20px; color: #333; font-weight: 600;">Status Indicators</h4>`;
@@ -1845,9 +2183,11 @@
                 document.getElementById('dateFrom').addEventListener('change', function() {
                     if (this.value) {
                         dateFilter.from = new Date(this.value);
+                        activeQuickRange = '';
                     } else {
                         dateFilter.from = null;
                     }
+                    updateQuickRangeButtons();
                     if (currentDevEUI) {
                         renderSensorDashboard(currentDevEUI);
                     }
@@ -1859,9 +2199,11 @@
                         const date = new Date(this.value);
                         date.setHours(23, 59, 59, 999);
                         dateFilter.to = date;
+                        activeQuickRange = '';
                     } else {
                         dateFilter.to = null;
                     }
+                    updateQuickRangeButtons();
                     if (currentDevEUI) {
                         renderSensorDashboard(currentDevEUI);
                     }
@@ -1872,10 +2214,25 @@
                     document.getElementById('dateTo').value = '';
                     dateFilter.from = null;
                     dateFilter.to = null;
+                    activeQuickRange = '';
+                    updateQuickRangeButtons();
                     if (currentDevEUI) {
                         renderSensorDashboard(currentDevEUI);
                     }
                 });
+
+                // Quick range buttons
+                const btn1h = document.getElementById('range1h');
+                const btn24h = document.getElementById('range24h');
+                const btn7d = document.getElementById('range7d');
+                const btn30d = document.getElementById('range30d');
+                const btnAll = document.getElementById('rangeAll');
+                if (btn1h) btn1h.addEventListener('click', () => setQuickRange('1h'));
+                if (btn24h) btn24h.addEventListener('click', () => setQuickRange('24h'));
+                if (btn7d) btn7d.addEventListener('click', () => setQuickRange('7d'));
+                if (btn30d) btn30d.addEventListener('click', () => setQuickRange('30d'));
+                if (btnAll) btnAll.addEventListener('click', () => setQuickRange('all'));
+                updateQuickRangeButtons();
 
                 // Start auto-refresh if enabled
                 if (document.getElementById('autoRefresh').checked) {

@@ -75,16 +75,13 @@ NAME="RadioBridgeTools"
 
 #
 #DAEMON
-# Fully qualified path to application executable.
+# Prefer frozen binary (offline/PyInstaller build) if present; else run from source.
 #
-# Examples:
-#  Python3 - execute interpreter directly:
-#   DAEMON="python3 ${APP_DIR}/example.py"
-#
-#  Compiled Executable (C, C++, etc):
-#   DAEMON="${APP_DIR}/example"
-#
-DAEMON="python3 \"${APP_DIR}/server.py\""
+if [ -x "${APP_DIR}/RadioBridgeTools" ]; then
+    DAEMON="${APP_DIR}/RadioBridgeTools"
+else
+    DAEMON="python3 \"${APP_DIR}/server.py\""
+fi
 
 #
 #DAEMON_DEBUG_ARGS
@@ -151,8 +148,11 @@ function ExecuteStart {
     logger -t Start "Starting: ${DAEMON} ${DAEMON_ARGS}"
 
     # Construct the command - ensure paths with spaces are properly handled
-    # Use single quotes in the bash -c command to preserve the paths
-    FULL_CMD="python3 '${APP_DIR}/server.py' --cfgfile '${CONFIG_DIR}/radioBridgeTools.cfg.json' --logfile '${APP_DIR}/debug_log.txt'"
+    if [ -x "${APP_DIR}/RadioBridgeTools" ]; then
+        FULL_CMD="'${APP_DIR}/RadioBridgeTools' --cfgfile '${CONFIG_DIR}/radioBridgeTools.cfg.json' --logfile '${APP_DIR}/debug_log.txt'"
+    else
+        FULL_CMD="python3 '${APP_DIR}/server.py' --cfgfile '${CONFIG_DIR}/radioBridgeTools.cfg.json' --logfile '${APP_DIR}/debug_log.txt'"
+    fi
     echo "Full command: $FULL_CMD"
     logger -t Start "Full command: $FULL_CMD"
     

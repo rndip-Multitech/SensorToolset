@@ -7,8 +7,10 @@ This will serve all of the HTML pages for configuring RadioBridge sensors.
 """
 Importing the required libraries.
 """
-from flask import Flask, send_from_directory, send_file, jsonify, request
+
+from flask import Flask, send_from_directory, send_file, jsonify, request, redirect
 from werkzeug.utils import secure_filename
+import io
 import json
 import logging
 import os
@@ -16,24 +18,22 @@ import argparse
 import urllib.request
 import urllib.error
 import ssl
+import base64
 
-"""
-Creating the Flask app and setting the template and static directories.
-"""
-app = Flask(__name__, static_folder='.', static_url_path='')
+from app_paths import get_app_root, get_custom_decoders_dir
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+APP_ROOT = get_app_root()
+
+"""
+Creating the Flask app and setting the template and static directories.
+"""
+app = Flask(__name__, static_folder=APP_ROOT, static_url_path='')
+
 # Custom decoder storage (served as static files)
-CUSTOM_DECODER_DIR = os.path.join(
-    os.path.dirname(__file__),
-    "NetworkDashboard-0.1",
-    "static",
-    "js",
-    "decoders",
-    "custom",
-)
+CUSTOM_DECODER_DIR = get_custom_decoders_dir()
 os.makedirs(CUSTOM_DECODER_DIR, exist_ok=True)
 
 
@@ -49,7 +49,8 @@ def _is_safe_decoder_filename(name: str) -> bool:
 
 
 def _decoder_file_url(filename: str) -> str:
-    return f"/NetworkDashboard-0.1/static/js/decoders/custom/{filename}"
+    # Always serve via explicit route so custom decoders can live in a writable directory.
+    return f"/decoders/custom/{filename}"
 
 # Try to import MQTT utilities - gracefully handle if paho-mqtt isn't installed
 try:
@@ -99,25 +100,25 @@ def load_config(config_file):
 @app.route('/')
 def index():
     """Serve the main index page."""
-    return send_file('index.html')
+    return send_file(os.path.join(APP_ROOT, 'index.html'))
 
 
 @app.route('/downlinks')
 def downlinks_page():
     """Serve the downlinks page."""
-    return send_file('downlinks.html')
+    return send_file(os.path.join(APP_ROOT, 'downlinks.html'))
 
 
 @app.route('/tools_downlinks')
-def tools_downlinks_page():
-    """Serve the generic downlink tools page."""
-    return send_file('tools_downlinks.html')
+def tools_downlinks_redirect():
+    """Redirect legacy URL to downlinks page."""
+    return redirect('/downlinks', code=302)
 
 
 @app.route('/sensors')
 def sensors_page():
     """Serve the sensor monitoring page."""
-    return send_file('sensors.html')
+    return send_file(os.path.join(APP_ROOT, 'sensors.html'))
 
 
 @app.route('/RBS30X-ABM/rbs30x-abm.html')
@@ -125,7 +126,7 @@ def sensors_page():
 @app.route('/rbs30x-abm.html')
 def abm_page():
     """Serve the RBS30X-ABM sensor configuration page."""
-    return send_file('RBS30X-ABM/rbs30x-abm.html')
+    return send_file(os.path.join(APP_ROOT, 'RBS30X-ABM', 'rbs30x-abm.html'))
 
 
 @app.route('/RBS30X-ABM/<path:filename>')
@@ -135,7 +136,7 @@ def abm_static(filename):
     # Security: prevent directory traversal
     if '..' in filename or filename.startswith('/'):
         return "Invalid path", 403
-    return send_from_directory('RBS30X-ABM', filename)
+    return send_from_directory(os.path.join(APP_ROOT, 'RBS30X-ABM'), filename)
 
 
 @app.route('/connect', methods=['POST'])
@@ -286,6 +287,16 @@ def list_decoders_route():
         return jsonify({"files": [], "error": str(e)}), 500
 
 
+@app.route('/decoders/custom/<path:filename>')
+def serve_custom_decoder(filename):
+    """Serve custom decoder JS files from the writable decoder directory."""
+    if '..' in filename or filename.startswith('/'):
+        return "Invalid path", 403
+    if not _is_safe_decoder_filename(filename):
+        return "Invalid filename", 403
+    return send_from_directory(CUSTOM_DECODER_DIR, filename)
+
+
 @app.route('/api/decoders/upload', methods=['POST'])
 def upload_decoder_route():
     """Upload a decoder JS file (multipart form: file)."""
@@ -349,6 +360,140 @@ def delete_decoder_route():
         return jsonify({"error": str(e)}), 500
 
 
+# --- Cloud Integrations API ---
+try:
+    import cloud_integrations
+    CLOUD_INTEGRATIONS_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Cloud integrations not available: {e}")
+    CLOUD_INTEGRATIONS_AVAILABLE = False
+
+
+@app.route('/cloud_integrations')
+def cloud_integrations_page():
+    """Serve the cloud integrations page."""
+    return send_file(os.path.join(APP_ROOT, 'cloud_integrations.html'))
+
+
+@app.route('/api/integrations', methods=['GET'])
+def list_integrations_route():
+    """List all cloud integrations."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"integrations": [], "error": "Cloud integrations not available"}), 200
+    try:
+        integrations = cloud_integrations.get_integrations()
+        return jsonify({"integrations": integrations}), 200
+    except Exception as e:
+        logger.error(f"Error listing integrations: {e}")
+        return jsonify({"integrations": [], "error": str(e)}), 500
+
+
+@app.route('/api/integrations', methods=['POST'])
+def add_integration_route():
+    """Add a new cloud integration."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"error": "Cloud integrations not available"}), 500
+    try:
+        data = request.get_json() or {}
+        integration = cloud_integrations.add_integration(data)
+        return jsonify({"integration": integration}), 201
+    except Exception as e:
+        logger.error(f"Error adding integration: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/integrations/<integration_id>', methods=['GET'])
+def get_integration_route(integration_id):
+    """Get a specific integration by ID."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"error": "Cloud integrations not available"}), 500
+    try:
+        integration = cloud_integrations.get_integration(integration_id)
+        if integration:
+            return jsonify({"integration": integration}), 200
+        return jsonify({"error": "Integration not found"}), 404
+    except Exception as e:
+        logger.error(f"Error getting integration: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/integrations/<integration_id>', methods=['PUT'])
+def update_integration_route(integration_id):
+    """Update an existing integration."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"error": "Cloud integrations not available"}), 500
+    try:
+        data = request.get_json() or {}
+        integration = cloud_integrations.update_integration(integration_id, data)
+        if integration:
+            return jsonify({"integration": integration}), 200
+        return jsonify({"error": "Integration not found"}), 404
+    except Exception as e:
+        logger.error(f"Error updating integration: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/integrations/<integration_id>', methods=['DELETE'])
+def delete_integration_route(integration_id):
+    """Delete an integration."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"error": "Cloud integrations not available"}), 500
+    try:
+        if cloud_integrations.delete_integration(integration_id):
+            return jsonify({"success": True}), 200
+        return jsonify({"error": "Integration not found"}), 404
+    except Exception as e:
+        logger.error(f"Error deleting integration: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/integrations/<integration_id>/toggle', methods=['POST'])
+def toggle_integration_route(integration_id):
+    """Enable or disable an integration."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"error": "Cloud integrations not available"}), 500
+    try:
+        data = request.get_json() or {}
+        enabled = data.get("enabled", True)
+        integration = cloud_integrations.toggle_integration(integration_id, enabled)
+        if integration:
+            return jsonify({"integration": integration}), 200
+        return jsonify({"error": "Integration not found"}), 404
+    except Exception as e:
+        logger.error(f"Error toggling integration: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/integrations/<integration_id>/test', methods=['POST'])
+def test_integration_route(integration_id):
+    """Test an integration with a sample message."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"success": False, "message": "Cloud integrations not available"}), 500
+    try:
+        integration = cloud_integrations.get_integration(integration_id)
+        if not integration:
+            return jsonify({"success": False, "message": "Integration not found"}), 404
+        result = cloud_integrations.test_integration(integration)
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error testing integration: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/integrations/test', methods=['POST'])
+def test_integration_unsaved_route():
+    """Test an unsaved integration configuration with a sample message."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"success": False, "message": "Cloud integrations not available"}), 500
+    try:
+        integration = request.get_json() or {}
+        result = cloud_integrations.test_integration(integration)
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error testing integration: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route('/send_downlink', methods=['POST'])
 def send_downlink_route():
     """
@@ -382,20 +527,23 @@ def serve_static(path):
     
     # Normalize path for case-insensitive matching on Windows
     normalized_path = path.replace('\\', '/')
+
+    # Always resolve under APP_ROOT (supports frozen builds)
+    abs_path = os.path.join(APP_ROOT, normalized_path)
     
     # Check if the file exists (case-sensitive check first)
-    if os.path.isfile(path):
-        directory = os.path.dirname(path) if os.path.dirname(path) else '.'
-        filename = os.path.basename(path)
+    if os.path.isfile(abs_path):
+        directory = os.path.dirname(abs_path)
+        filename = os.path.basename(abs_path)
         return send_from_directory(directory, filename)
     
     # Case-insensitive fallback: try to find the file with different case
     # This is useful on Windows where filesystem is case-insensitive but URLs might be case-sensitive
-    if not os.path.isfile(path):
+    if not os.path.isfile(abs_path):
         # Try to find the file with case-insensitive matching
         path_parts = normalized_path.split('/')
         if len(path_parts) > 1:
-            dir_part = '/'.join(path_parts[:-1])
+            dir_part = os.path.join(APP_ROOT, *path_parts[:-1])
             file_part = path_parts[-1]
             if os.path.isdir(dir_part):
                 # List files in directory and find case-insensitive match
@@ -407,28 +555,28 @@ def serve_static(path):
                     pass
     
     # If it's a directory, try to serve index.html from it
-    if os.path.isdir(path):
-        index_path = os.path.join(path, 'index.html')
+    if os.path.isdir(abs_path):
+        index_path = os.path.join(abs_path, 'index.html')
         if os.path.isfile(index_path):
-            return send_from_directory(path, 'index.html')
+            return send_from_directory(abs_path, 'index.html')
         # If no index.html, try to find an HTML file with the directory name
         try:
-            html_files = [f for f in os.listdir(path) if f.endswith('.html')]
+            html_files = [f for f in os.listdir(abs_path) if f.endswith('.html')]
             if html_files:
                 # Try to find a file matching the directory name
-                dir_name = os.path.basename(path.rstrip('/'))
+                dir_name = os.path.basename(abs_path.rstrip('/'))
                 for html_file in html_files:
                     if html_file.startswith(dir_name) or html_file == 'index.html':
-                        return send_from_directory(path, html_file)
+                        return send_from_directory(abs_path, html_file)
                 # If no match, serve the first HTML file
-                return send_from_directory(path, html_files[0])
+                return send_from_directory(abs_path, html_files[0])
         except OSError:
             pass
     
     # Default: try to serve the file anyway (for relative paths)
     try:
-        directory = os.path.dirname(path) if os.path.dirname(path) else '.'
-        filename = os.path.basename(path)
+        directory = os.path.dirname(abs_path)
+        filename = os.path.basename(abs_path)
         return send_from_directory(directory, filename)
     except Exception as e:
         logger.warning(f"Failed to serve {path}: {e}")

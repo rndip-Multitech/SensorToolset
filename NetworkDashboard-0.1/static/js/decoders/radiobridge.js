@@ -418,6 +418,350 @@
     return Object.assign(out, decoded);
   }
 
+  // --- Encoder helpers ---
+  function hexByte(v) {
+    v = Number(v);
+    if (!Number.isFinite(v)) v = 0;
+    v = Math.max(0, Math.min(255, v));
+    return v.toString(16).padStart(2, '0');
+  }
+  function signedHexByte(v) {
+    v = Number(v);
+    if (!Number.isFinite(v)) v = 0;
+    v = Math.max(-128, Math.min(127, v));
+    if (v < 0) v = 256 + v;
+    return v.toString(16).padStart(2, '0');
+  }
+  function periodicHex(mode, value) {
+    var p = Number(value);
+    if (!Number.isFinite(p) || p < 1 || p > 127) return '00';
+    if (mode === 'disabled') return '00';
+    if (mode === 'minutes') return (0x80 + p).toString(16).padStart(2, '0');
+    if (mode === 'hours') return p.toString(16).padStart(2, '0');
+    return '00';
+  }
+  function hexToBase64(hex) {
+    var bytes = [];
+    for (var i = 0; i < hex.length; i += 2) {
+      bytes.push(parseInt(hex.substr(i, 2), 16));
+    }
+    return btoa(String.fromCharCode.apply(null, bytes));
+  }
+
+  // --- RadioBridge Encoders ---
+  var radioBridgeEncoders = [
+    // Temperature Sensor
+    {
+      id: 'rb_temp_config',
+      name: 'Temperature Sensor Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'sensor_type', label: 'Sensor Type', type: 'select', required: true, options: [
+          { value: 'external', label: 'External Probe (RBS30x-TEMP-EXT)' },
+          { value: 'internal', label: 'Internal (CMOS)' }
+        ]},
+        { key: 'mode', label: 'Reporting Mode', type: 'select', required: true, options: [
+          { value: 'threshold', label: 'Threshold' },
+          { value: 'roc', label: 'Report on Change' }
+        ]},
+        { key: 'periodic', label: 'Periodic Reporting', type: 'select', required: true, options: [
+          { value: 'disabled', label: 'Disabled' },
+          { value: 'minutes', label: 'Minutes' },
+          { value: 'hours', label: 'Hours' }
+        ]},
+        { key: 'period_value', label: 'Period (1-127)', type: 'number', default: 60 },
+        { key: 'threshold_lower', label: 'Lower Threshold (°C, -128 to 127)', type: 'number', default: 0 },
+        { key: 'threshold_upper', label: 'Upper Threshold (°C, -128 to 127)', type: 'number', default: 30 },
+        { key: 'roc_sensitivity', label: 'ROC Sensitivity (°C)', type: 'number', default: 5 },
+        { key: 'roc_interval', label: 'ROC Interval', type: 'number', default: 0 },
+        { key: 'restoral_margin', label: 'Restoral Margin (0-15)', type: 'number', default: 0 }
+      ],
+      encode: function (p) {
+        var dnType = p.sensor_type === 'external' ? '09' : '19';
+        var pHex = periodicHex(p.periodic, p.period_value);
+        var mode = p.mode || 'threshold';
+        var notif = mode === 'threshold' ? '00' : '01';
+        var restoral = hexByte(Math.min(15, Math.max(0, Number(p.restoral_margin) || 0)));
+        var byte5, byte6;
+        if (mode === 'threshold') {
+          byte5 = signedHexByte(p.threshold_lower);
+          byte6 = signedHexByte(p.threshold_upper);
+        } else {
+          byte5 = hexByte(p.roc_sensitivity);
+          byte6 = hexByte(p.roc_interval);
+        }
+        var hex = dnType + notif + pHex + restoral + byte5 + byte6 + '0000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // Movement Sensor (ABM)
+    {
+      id: 'rb_abm_config',
+      name: 'Movement Sensor (ABM) Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'report_start', label: 'Report Movement Start', type: 'select', required: true, options: [
+          { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }
+        ]},
+        { key: 'report_stop', label: 'Report Movement Stop', type: 'select', required: true, options: [
+          { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }
+        ]},
+        { key: 'threshold', label: 'Acceleration Threshold (5-255)', type: 'number', default: 5 },
+        { key: 'settling', label: 'Settling Window (0x05-0x3F)', type: 'number', default: 20 },
+        { key: 'scaling', label: 'Scaling Factor', type: 'select', required: true, options: [
+          { value: '00', label: '+/- 2g' },
+          { value: '01', label: '+/- 4g' },
+          { value: '02', label: '+/- 8g' },
+          { value: '03', label: '+/- 16g' }
+        ]}
+      ],
+      encode: function (p) {
+        var movStart = p.report_start === 'yes';
+        var movStop = p.report_stop === 'yes';
+        var startStopHex = '03';
+        if (movStart && movStop) startStopHex = '00';
+        else if (movStart && !movStop) startStopHex = '02';
+        else if (!movStart && movStop) startStopHex = '01';
+        var actHex = hexByte(Math.max(5, Number(p.threshold) || 5));
+        var swtHex = hexByte(Number(p.settling) || 20);
+        var scalingHex = p.scaling || '00';
+        var hex = '0E' + actHex + swtHex + scalingHex + startStopHex + '000000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // Door/Window Sensor
+    {
+      id: 'rb_door_window_config',
+      name: 'Door/Window Sensor Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'periodic', label: 'Periodic Reporting', type: 'select', required: true, options: [
+          { value: 'disabled', label: 'Disabled' },
+          { value: 'minutes', label: 'Minutes' },
+          { value: 'hours', label: 'Hours' }
+        ]},
+        { key: 'period_value', label: 'Period (1-127)', type: 'number', default: 60 },
+        { key: 'debounce', label: 'Debounce Time (0-255, units of 10ms)', type: 'number', default: 10 }
+      ],
+      encode: function (p) {
+        var pHex = periodicHex(p.periodic, p.period_value);
+        var debounce = hexByte(Number(p.debounce) || 10);
+        var hex = '03' + '00' + pHex + debounce + '00000000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // Contact Sensor
+    {
+      id: 'rb_contact_config',
+      name: 'Contact Sensor Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'periodic', label: 'Periodic Reporting', type: 'select', required: true, options: [
+          { value: 'disabled', label: 'Disabled' },
+          { value: 'minutes', label: 'Minutes' },
+          { value: 'hours', label: 'Hours' }
+        ]},
+        { key: 'period_value', label: 'Period (1-127)', type: 'number', default: 60 },
+        { key: 'debounce', label: 'Debounce Time (0-255, units of 10ms)', type: 'number', default: 10 }
+      ],
+      encode: function (p) {
+        var pHex = periodicHex(p.periodic, p.period_value);
+        var debounce = hexByte(Number(p.debounce) || 10);
+        var hex = '07' + '00' + pHex + debounce + '00000000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // Push Button Sensor
+    {
+      id: 'rb_push_button_config',
+      name: 'Push Button Sensor Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'button_event', label: 'Button Event', type: 'select', required: true, options: [
+          { value: '01', label: 'Pressed' },
+          { value: '02', label: 'Released' },
+          { value: '03', label: 'Pressed and Released' },
+          { value: '04', label: 'Hold' },
+          { value: '05', label: 'Pressed + Hold' },
+          { value: '06', label: 'Released + Hold' },
+          { value: '07', label: 'All Events' }
+        ]},
+        { key: 'hold_delay', label: 'Hold Delay (0-255, units of 0.5s)', type: 'number', default: 4 },
+        { key: 'led_on_press', label: 'LED on Press', type: 'select', options: [
+          { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }
+        ]},
+        { key: 'led_on_release', label: 'LED on Release', type: 'select', options: [
+          { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }
+        ]}
+      ],
+      encode: function (p) {
+        var buttonEventHex = p.button_event || '07';
+        var holdDelayHex = hexByte(Number(p.hold_delay) || 4);
+        var ledFlags = 0;
+        if (p.led_on_press === 'yes') ledFlags |= 0x01;
+        if (p.led_on_release === 'yes') ledFlags |= 0x02;
+        var ledFlagsHex = hexByte(ledFlags);
+        var hex = '06' + buttonEventHex + holdDelayHex + ledFlagsHex + '00000000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // Tilt Sensor
+    {
+      id: 'rb_tilt_config',
+      name: 'Tilt Sensor Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'enable_horiz', label: 'Enable Horizontal Tilt', type: 'select', options: [
+          { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }
+        ]},
+        { key: 'enable_vert', label: 'Enable Vertical Tilt', type: 'select', options: [
+          { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }
+        ]},
+        { key: 'angle_horiz', label: 'Horizontal Angle Threshold (0-90°)', type: 'number', default: 45 },
+        { key: 'angle_vert', label: 'Vertical Angle Threshold (0-90°)', type: 'number', default: 45 },
+        { key: 'hold_horiz', label: 'Horizontal Hold Time (0-255, units of 0.5s)', type: 'number', default: 10 },
+        { key: 'hold_vert', label: 'Vertical Hold Time (0-255, units of 0.5s)', type: 'number', default: 10 },
+        { key: 'roc_horiz', label: 'ROC Horizontal (0-90°)', type: 'number', default: 0 },
+        { key: 'roc_vert', label: 'ROC Vertical (0-90°)', type: 'number', default: 0 }
+      ],
+      encode: function (p) {
+        var enableTilts = 0;
+        if (p.enable_horiz === 'yes') enableTilts |= 0x01;
+        if (p.enable_vert === 'yes') enableTilts |= 0x02;
+        var enableTiltsHex = hexByte(enableTilts);
+        var angleHorizHex = hexByte(Math.min(90, Math.max(0, Number(p.angle_horiz) || 45)));
+        var angleVertHex = hexByte(Math.min(90, Math.max(0, Number(p.angle_vert) || 45)));
+        var holdHorizHex = hexByte(Number(p.hold_horiz) || 10);
+        var holdVertHex = hexByte(Number(p.hold_vert) || 10);
+        var rocHorizHex = hexByte(Math.min(90, Math.max(0, Number(p.roc_horiz) || 0)));
+        var rocVertHex = hexByte(Math.min(90, Math.max(0, Number(p.roc_vert) || 0)));
+        var hex = '0A' + '00' + enableTiltsHex + angleHorizHex + angleVertHex + holdVertHex + holdHorizHex + rocHorizHex + rocVertHex;
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // Water Sensor
+    {
+      id: 'rb_water_config',
+      name: 'Water Sensor Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'periodic', label: 'Periodic Reporting', type: 'select', required: true, options: [
+          { value: 'disabled', label: 'Disabled' },
+          { value: 'minutes', label: 'Minutes' },
+          { value: 'hours', label: 'Hours' }
+        ]},
+        { key: 'period_value', label: 'Period (1-127)', type: 'number', default: 60 },
+        { key: 'sensitivity', label: 'Sensitivity (0-255)', type: 'number', default: 128 }
+      ],
+      encode: function (p) {
+        var pHex = periodicHex(p.periodic, p.period_value);
+        var sensitivity = hexByte(Number(p.sensitivity) || 128);
+        var hex = '08' + '00' + pHex + sensitivity + '00000000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // Ultrasonic Level Sensor
+    {
+      id: 'rb_ultrasonic_config',
+      name: 'Ultrasonic Level Sensor Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'reporting_type', label: 'Reporting Type', type: 'select', required: true, options: [
+          { value: '00', label: 'Threshold' },
+          { value: '01', label: 'Report on Change' }
+        ]},
+        { key: 'periodic', label: 'Periodic Reporting', type: 'select', required: true, options: [
+          { value: 'disabled', label: 'Disabled' },
+          { value: 'minutes', label: 'Minutes' },
+          { value: 'hours', label: 'Hours' }
+        ]},
+        { key: 'period_value', label: 'Period (1-127)', type: 'number', default: 60 },
+        { key: 'hold_time', label: 'Hold Time (0-255, units of 1s)', type: 'number', default: 5 },
+        { key: 'value1', label: 'Threshold/ROC Value 1 (cm)', type: 'number', default: 50 },
+        { key: 'value2', label: 'Threshold/ROC Value 2 (cm)', type: 'number', default: 200 }
+      ],
+      encode: function (p) {
+        var reportingTypeHex = p.reporting_type || '00';
+        var pHex = periodicHex(p.periodic, p.period_value);
+        var holdTimeHex = hexByte(Number(p.hold_time) || 5);
+        var val1 = Number(p.value1) || 50;
+        var val2 = Number(p.value2) || 200;
+        var value1Hex = ((val1 >> 8) & 0xFF).toString(16).padStart(2, '0') + (val1 & 0xFF).toString(16).padStart(2, '0');
+        var value2Hex = ((val2 >> 8) & 0xFF).toString(16).padStart(2, '0') + (val2 & 0xFF).toString(16).padStart(2, '0');
+        var hex = '10' + reportingTypeHex + pHex + holdTimeHex + value1Hex + value2Hex + '00';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // 4-20mA Sensor
+    {
+      id: 'rb_420ma_config',
+      name: '4-20mA Current Loop Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'periodic', label: 'Periodic Reporting', type: 'select', required: true, options: [
+          { value: 'disabled', label: 'Disabled' },
+          { value: 'minutes', label: 'Minutes' },
+          { value: 'hours', label: 'Hours' }
+        ]},
+        { key: 'period_value', label: 'Period (1-127)', type: 'number', default: 60 },
+        { key: 'lower_threshold', label: 'Lower Threshold (mA, 0-20)', type: 'number', default: 4 },
+        { key: 'upper_threshold', label: 'Upper Threshold (mA, 0-20)', type: 'number', default: 20 }
+      ],
+      encode: function (p) {
+        var pHex = periodicHex(p.periodic, p.period_value);
+        var lower = Math.round((Number(p.lower_threshold) || 4) * 10);
+        var upper = Math.round((Number(p.upper_threshold) || 20) * 10);
+        var lowerHex = hexByte(Math.min(255, Math.max(0, lower)));
+        var upperHex = hexByte(Math.min(255, Math.max(0, upper)));
+        var hex = '0A' + '00' + pHex + '00' + lowerHex + upperHex + '0000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+    // Air Temp & Humidity Sensor
+    {
+      id: 'rb_ath_config',
+      name: 'Air Temp & Humidity Sensor Config',
+      defaultPort: 1,
+      schema: [
+        { key: 'mode', label: 'Reporting Mode', type: 'select', required: true, options: [
+          { value: 'threshold', label: 'Threshold' },
+          { value: 'roc', label: 'Report on Change' }
+        ]},
+        { key: 'periodic', label: 'Periodic Reporting', type: 'select', required: true, options: [
+          { value: 'disabled', label: 'Disabled' },
+          { value: 'minutes', label: 'Minutes' },
+          { value: 'hours', label: 'Hours' }
+        ]},
+        { key: 'period_value', label: 'Period (1-127)', type: 'number', default: 60 },
+        { key: 'temp_lower', label: 'Temp Lower Threshold (°C)', type: 'number', default: 0 },
+        { key: 'temp_upper', label: 'Temp Upper Threshold (°C)', type: 'number', default: 30 },
+        { key: 'humidity_lower', label: 'Humidity Lower Threshold (%)', type: 'number', default: 20 },
+        { key: 'humidity_upper', label: 'Humidity Upper Threshold (%)', type: 'number', default: 80 },
+        { key: 'roc_temp', label: 'ROC Temp (°C)', type: 'number', default: 5 },
+        { key: 'roc_humidity', label: 'ROC Humidity (%)', type: 'number', default: 10 }
+      ],
+      encode: function (p) {
+        var mode = p.mode || 'threshold';
+        var rocOrThreshHex = mode === 'threshold' ? '00' : '01';
+        var pHex = periodicHex(p.periodic, p.period_value);
+        var byte4, byte5, byte6, byte7;
+        if (mode === 'threshold') {
+          byte4 = signedHexByte(p.temp_lower);
+          byte5 = signedHexByte(p.temp_upper);
+          byte6 = hexByte(Number(p.humidity_lower) || 20);
+          byte7 = hexByte(Number(p.humidity_upper) || 80);
+        } else {
+          byte4 = hexByte(Number(p.roc_temp) || 5);
+          byte5 = hexByte(Number(p.roc_humidity) || 10);
+          byte6 = '00';
+          byte7 = '00';
+        }
+        var hex = '0D' + rocOrThreshHex + pHex + '00' + byte4 + byte5 + byte6 + byte7;
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    }
+  ];
+
   window.RBTDecoders.registerDecoder({
     id: 'radiobridge_js',
     name: 'RadioBridge (JS)',
@@ -436,6 +780,7 @@
       decoded.payload_len = bytes ? bytes.length : 0;
       return window.RBTDecoders.normalizeDecodedOutput(decoded);
     },
+    encoders: radioBridgeEncoders,
   });
 })();
 

@@ -23,6 +23,9 @@
         .mode-panel { display: none; }
         .mode-panel.active { display: block; }
         textarea.raw-payload { width: 100%; max-width: 600px; min-height: 100px; padding: 8px; font-family: monospace; font-size: 12px; }
+        .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: bold; }
+        .pill.sent { background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }
+        .pill.failed { background: #ffebee; color: #b71c1c; border: 1px solid #ffcdd2; }
     </style>
 </head>
 <body>
@@ -43,6 +46,7 @@
                 <li class="item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;"><path d="M3 3v18h18"></path><path d="M7 16l4-4 4 4 6-6"></path></svg><a href="sensors.html">Sensors</a></li>
                 <li class="item active"><img src="NetworkDashboard-0.1/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks"><a href="downlinks.html">Send Downlinks</a></li>
                 <li class="item"><img src="NetworkDashboard-0.1/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders"><a href="decoders.html">Decoders</a></li>
+                <li class="item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg><a href="cloud_integrations.html">Cloud Integrations</a></li>
                 <li class="item"><img src="NetworkDashboard-0.1/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge"><a href="radiobridge.html">RadioBridge Config</a></li>
             </ul>
         </div>
@@ -140,6 +144,32 @@
             </div>
 
             <div id="status" class="status"></div>
+
+            <div class="panel">
+                <div style="display:flex; justify-content: space-between; align-items:center; gap: 10px; flex-wrap: wrap;">
+                    <h3 style="margin:0;">Downlink history</h3>
+                    <button type="button" class="action-button" id="refreshHistoryBtn">Refresh</button>
+                </div>
+                <p style="margin-top: 8px; color: #666; font-size: 12px;">
+                    Shows recent downlink attempts (sent/failed) recorded on the server.
+                </p>
+                <div style="overflow-x:auto;">
+                    <table class="history">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>DevEUI</th>
+                                <th>Port</th>
+                                <th>Status</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody">
+                            <tr><td colspan="5" style="text-align:center; padding: 14px; color:#666;">No history loaded.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -399,6 +429,7 @@
                 const data = await res.json().catch(() => ({}));
                 if (data.error) showStatus('err', data.error);
                 else showStatus('ok', 'Downlink sent to ' + devEui + ' on port ' + port);
+                loadHistory();
             } catch (e) {
                 showStatus('err', 'Error: ' + e);
             }

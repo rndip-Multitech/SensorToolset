@@ -1,204 +1,138 @@
-/* =========================== */
-/* Global Compact Styling      */
-/* =========================== */
+/* RadioBridge Sensor Config - Supplementary Styles */
+/* Works WITH main styles.css, not against it */
 
-body {
-    font-family: Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.25;
-    margin: 10px;
-    color: #000;
+/* Sensor images */
+.sensor-int { width: 80px; height: auto; }
+.sensor-ext301 { width: 95px; height: auto; }
+.sensor-ext306 { width: 110px; height: auto; }
+
+/* Config form sections */
+.config-section {
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    border: 1px solid #e0e0e0;
 }
 
-
-/* =========================== */
-/* Header Area                 */
-/* =========================== */
-
-header {
-    text-align: left;
-    margin-bottom: 10px;
+.config-section .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    color: #333;
+    text-transform: none;
 }
 
-.logo {
-    width: 170px;
-    height: auto;
-}
-
-/* Independent PNG sizing */
-.sensor-int {
-    width: 80px;
-    height: auto;
-    margin-left: 10px;
-}
-
-.sensor-ext301 {
-    width: 95px;
-    height: auto;
-    margin-left: 10px;
-}
-
-.sensor-ext306 {
-    width: 110px;
-    height: auto;
-    margin-left: 10px;
-}
-
-.title {
-    font-size: 18px;
-    margin: 4px 0;
-}
-
-
-/* =========================== */
-/* Section Titles              */
-/* =========================== */
-
-.section-title {
-    font-size: 15px;
-    font-weight: bold;
-    margin: 10px 0 4px 0;
-}
-
-
-/* =========================== */
-/* Section Layout              */
-/* =========================== */
-
-.section {
-    margin-bottom: 12px;
-}
-
+/* Form rows */
 .row {
     display: flex;
     align-items: center;
-    gap: 14px;
-    margin-bottom: 6px;
+    gap: 16px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
 }
 
 .column {
     display: flex;
     flex-direction: column;
+    gap: 4px;
 }
 
 .inline-label {
+    font-size: 14px;
+    color: #333;
     white-space: nowrap;
+}
+
+.lower-label { color: #1976d2; font-weight: 600; }
+.upper-label { color: #d32f2f; font-weight: 600; }
+
+/* Form inputs */
+select, input[type="number"], input[type="text"] {
+    height: 36px;
+    padding: 6px 12px;
     font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: inherit;
 }
 
-.lower-label {
-    color: blue;
-    font-weight: bold;
+select:focus, input:focus {
+    border-color: #2196f3;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
 }
 
-.upper-label {
-    color: red;
-    font-weight: bold;
+.input-wide { width: 240px; }
+.input-medium { width: 160px; }
+.input-small { width: 100px; }
+
+/* Generated hex section */
+#hex-section {
+    background-color: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
 }
-
-
-/* =========================== */
-/* Inputs                      */
-/* =========================== */
-
-select,
-input[type="number"] {
-    height: 22px;
-    padding: 2px 4px;
-    font-size: 14px;
-}
-
-.input-wide {
-    width: 220px;
-}
-
-.input-medium {
-    width: 150px;
-}
-
-.input-small {
-    width: 80px;
-}
-
-
-/* =========================== */
-/* Buttons                     */
-/* =========================== */
-
-button {
-    padding: 4px 8px;
-    font-size: 14px;
-    cursor: pointer;
-}
-
-.help-button {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    font-weight: bold;
-    padding: 0;
-}
-
-.generate-button {
-    width: 180px;
-    height: 30px;
-    margin-top: 10px;
-    font-size: 15px;
-}
-
-.action-button {
-    margin-top: 5px;
-    margin-right: 5px;
-}
-
-
-/* =========================== */
-/* Hex Display                 */
-/* =========================== */
 
 .inline-title {
+    font-size: 15px;
+    font-weight: 600;
     margin: 0;
-    font-size: 16px;
+    color: #333;
 }
 
 .hex-display {
-    font-family: monospace;
-    font-size: 20px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 18px;
     font-weight: bold;
+    color: #2e7d32;
+    margin-left: 12px;
+    letter-spacing: 1px;
 }
 
+/* Generate button */
+.generate-button {
+    background-color: #4caf50;
+    color: white;
+    padding: 10px 24px;
+    font-size: 15px;
+    font-weight: 500;
+    margin-top: 16px;
+}
 
-/* =========================== */
-/* Modal Dialog Styles         */
-/* =========================== */
+.generate-button:hover {
+    background-color: #388e3c;
+}
 
+/* Action buttons row */
+.action-button {
+    margin-top: 8px;
+    margin-right: 8px;
+}
+
+/* Modal overrides */
 .modal-overlay {
+    display: flex !important;
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
-    background: rgba(0,0,0,0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: rgba(0,0,0,0.5);
     z-index: 9999;
+    justify-content: center;
+    align-items: center;
 }
 
 .modal-box {
     background: #fff;
-    padding: 16px;
+    padding: 24px;
     border-radius: 8px;
-    width: 320px;
+    width: 400px;
     max-width: 90%;
-    text-align: left; /* ← Left aligned text */
-    font-size: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
 
-/* =========================== */
-/* Home Button                 */
-/* =========================== */
-
-.home-button {
-    width: 100px;
-    height: 30px;
-    font-size: 14px;
+.modal-box button {
+    margin-top: 16px;
 }

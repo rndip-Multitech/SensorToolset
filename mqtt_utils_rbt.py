@@ -19,12 +19,22 @@ from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
 
+# Try to import cloud integrations module
+try:
+    import cloud_integrations
+    CLOUD_INTEGRATIONS_AVAILABLE = True
+except ImportError:
+    CLOUD_INTEGRATIONS_AVAILABLE = False
+    cloud_integrations = None
+
 # Try to import the enhanced decoder from network-dashboard
 try:
     import sys
     import os
+    from app_paths import get_network_dashboard_py_dir
+
     # Add the NetworkDashboard static/py directory to the path
-    network_dashboard_py_path = os.path.join(os.path.dirname(__file__), 'NetworkDashboard-0.1', 'static', 'py')
+    network_dashboard_py_path = get_network_dashboard_py_dir()
     if network_dashboard_py_path not in sys.path:
         sys.path.insert(0, network_dashboard_py_path)
     from radiobridgev3 import Decoder
@@ -297,6 +307,21 @@ def _on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
 
     if len(message_buffer) > 150:
         message_buffer.pop(0)
+
+    # Forward to cloud integrations (async, non-blocking)
+    if CLOUD_INTEGRATIONS_AVAILABLE and message_buffer:
+        try:
+            last_msg = message_buffer[-1]
+            if last_msg.get("type") == "json":
+                cloud_integrations.forward_message({
+                    "topic": last_msg.get("topic", ""),
+                    "data": last_msg.get("data", {}),
+                    "decoded": last_msg.get("data", {}).get("data_decoded"),
+                    "deveui": last_msg.get("data", {}).get("deveui") if isinstance(last_msg.get("data"), dict) else None,
+                    "time": datetime.now(timezone.utc).isoformat(),
+                })
+        except Exception as fwd_err:
+            print(f"Cloud integration forward error: {fwd_err}")
 
 
 def connect_to_broker(broker: str = "localhost", port: int = 1883, topic: str = "lora/+/up") -> None:

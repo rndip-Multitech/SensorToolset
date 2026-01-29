@@ -121,6 +121,12 @@
                     <a href="decoders.html">Decoders</a>
                 </li>
                 <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <a href="cloud_integrations.html">Cloud Integrations</a>
+                </li>
+                <li class="item">
                     <img src="NetworkDashboard-0.1/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
                     <a href="radiobridge.html">RadioBridge Config</a>
                 </li>
@@ -137,14 +143,42 @@
             <h2 class="section-title">Add / Edit Decoder (JavaScript)</h2>
 
             <div class="panel">
-                <h3>Upload a decoder file</h3>
+                <h3>Upload decoder or encoder file</h3>
                 <div class="row">
                     <input type="file" id="decoderFile" accept=".js">
                     <button class="action-button" id="uploadBtn" type="button">Upload</button>
                 </div>
                 <p class="hint">
-                    Upload a `.js` file that calls `window.RBTDecoders.registerDecoder(...)`.
+                    Upload a <code>.js</code> file: decoders (TTN <code>Decoder(bytes, port)</code>, ChirpStack
+                    <code>decodeUplink</code>) or encoders (TTN <code>Encoder(payload, port)</code>, ChirpStack
+                    <code>encodeDownlink</code>). The app auto-detects the format and wraps as needed.
+                    Already-wrapped Sensor Toolkit plugins (<code>registerDecoder</code>) are saved directly.
                 </p>
+            </div>
+
+            <div class="panel">
+                <h3>Add encoder separately</h3>
+                <p class="hint" style="margin-bottom: 10px;">
+                    Encoders can live in the same file as a decoder (e.g. Sensative Strips) or in a separate file.
+                    Add encoder-only files here; they will appear in <strong>Send Downlinks</strong> as codecs.
+                </p>
+                <div class="row">
+                    <input type="file" id="encoderFile" accept=".js">
+                    <button class="action-button" id="uploadEncoderBtn" type="button">Upload encoder</button>
+                </div>
+                <div class="row" style="margin-top: 12px;">
+                    <label for="encoderName"><strong>Filename</strong> (e.g. <code>my_encoder.js</code>):</label>
+                    <input type="text" id="encoderName" placeholder="my_encoder.js" style="min-width: 200px;">
+                    <label for="encoderFormat"><strong>Format</strong> (override if auto-detect fails):</label>
+                    <select id="encoderFormat" class="decoder-select">
+                        <option value="auto">Auto-detect</option>
+                        <option value="rbt_plugin">RBT plugin (registerDecoder with encoders)</option>
+                        <option value="ttn_encoder">TTN Encoder(payload, port)</option>
+                        <option value="chirpstack_downlink">ChirpStack encodeDownlink(input)</option>
+                    </select>
+                    <button class="action-button" id="saveEncoderBtn" type="button">Save encoder</button>
+                </div>
+                <textarea id="encoderCode" spellcheck="false" placeholder="Paste encoder code (TTN Encoder, ChirpStack encodeDownlink, or RBT registerDecoder with encoders)…" style="min-height: 120px; margin-top: 10px;"></textarea>
             </div>
 
             <div class="panel">
@@ -152,20 +186,20 @@
                 <div class="row">
                     <label for="decoderName"><strong>Filename</strong> (must end in `.js`):</label>
                     <input type="text" id="decoderName" placeholder="example_decoder.js">
-                    <label for="decoderFormat"><strong>Format</strong>:</label>
+                    <label for="decoderFormat"><strong>Format</strong> (override if auto-detect fails):</label>
                     <select id="decoderFormat" class="decoder-select">
                         <option value="auto">Auto-detect</option>
                         <option value="rbt_plugin">Sensor Toolkit plugin (registerDecoder)</option>
-                        <option value="ttn_decoder">TTN-style: function Decoder(bytes, port)</option>
-                        <option value="chirpstack_uplink">ChirpStack-style: function decodeUplink(input)</option>
+                        <option value="ttn_decoder">TTN Decoder(bytes, port)</option>
+                        <option value="chirpstack_uplink">ChirpStack decodeUplink(input)</option>
+                        <option value="ttn_encoder">TTN Encoder(payload, port)</option>
+                        <option value="chirpstack_downlink">ChirpStack encodeDownlink(input)</option>
                     </select>
-                    <button class="action-button" id="wrapBtn" type="button">Wrap / Fix format</button>
                     <button class="action-button" id="saveBtn" type="button">Save</button>
                     <button class="action-button" id="testBtn" type="button">Test-load in browser</button>
                 </div>
                 <p class="hint">
-                    If you paste a TTN/ChirpStack decoder, click <strong>Wrap / Fix format</strong> to convert it into a Sensor Toolkit plugin automatically.
-                    “Test-load” runs the code in this page only (via a Blob). “Save” uploads it to the server so `uplinks.html` can load it.
+                    Paste decoder or encoder code (TTN, ChirpStack, or Sensor Toolkit). The app auto-wraps as needed. “Test-load” runs it in this page only; “Save” stores it on the server (decoders → Uplinks, encoders → Send Downlinks).
                 </p>
                 <textarea id="decoderCode" spellcheck="false" placeholder="(function () {&#10;  'use strict';&#10;  if (!window.RBTDecoders) return;&#10;  window.RBTDecoders.registerDecoder({&#10;    id: 'my_decoder',&#10;    name: 'My Decoder',&#10;    priority: 200,&#10;    canDecode: function (message) { return false; },&#10;    decode: function (message) { return { eventType: 'example', decoded: { ok: true } }; }&#10;  });&#10;})();"></textarea>
             </div>
@@ -351,6 +385,8 @@
             if (/window\.RBTDecoders\.registerDecoder\s*\(/.test(code)) return 'rbt_plugin';
             if (/function\s+Decoder\s*\(\s*bytes\s*,\s*port\s*\)/.test(code) || /\bDecoder\s*=\s*function\s*\(\s*bytes\s*,\s*port\s*\)/.test(code)) return 'ttn_decoder';
             if (/function\s+decodeUplink\s*\(\s*input\s*\)/.test(code) || /\bdecodeUplink\s*=\s*function\s*\(\s*input\s*\)/.test(code)) return 'chirpstack_uplink';
+            if (/function\s+Encoder\s*\(\s*payload\s*,\s*port\s*\)/.test(code) || /\bEncoder\s*=\s*function\s*\(\s*payload\s*,\s*port\s*\)/.test(code)) return 'ttn_encoder';
+            if (/function\s+encodeDownlink\s*\(\s*input\s*\)/.test(code) || /\bencodeDownlink\s*=\s*function\s*\(\s*input\s*\)/.test(code)) return 'chirpstack_downlink';
             return 'unknown';
         }
 
@@ -407,14 +443,12 @@ ${helpers}
     id: '${id}',
     name: '${name}',
     priority: 200,
-    // Adjust this if you want (port/topic based)
     canDecode: function (message) { return true; },
     decode: function (message) {
       const b64 = window.RBTDecoders.helpers.extractBase64Payload(message);
       const bytes = window.RBTDecoders.helpers.base64ToBytes(b64) || new Uint8Array([]);
       const port = getPort(message);
       const out = decodeUplink({ bytes: Array.from(bytes), fPort: port });
-      // ChirpStack decoders usually return {data, warnings, errors}
       const decoded = (out && (out.data !== undefined)) ? out : { data: out };
       return { eventType: '${id}', decoded: decoded };
     }
@@ -422,46 +456,154 @@ ${helpers}
 })();\n`;
             }
 
+            if (format === 'ttn_encoder') {
+                // Extract command names from case statements or payload keys
+                const caseMatches = code.match(/case\s+["']([^"']+)["']\s*:/g) || [];
+                const commands = caseMatches.map(m => m.match(/["']([^"']+)["']/)[1]);
+                const uniqueCommands = [...new Set(commands)].sort();
+                
+                // Build command options for dropdown
+                const cmdOptions = uniqueCommands.map(cmd => `{ value: '${cmd}', label: '${cmd}' }`).join(',\n          ');
+                const hasCommands = uniqueCommands.length > 0;
+                
+                return `(function () {
+  'use strict';
+  if (!window.RBTDecoders) return;
+${code}
+  // Commands extracted from encoder: ${uniqueCommands.join(', ') || 'none detected (using raw JSON mode)'}
+  window.RBTDecoders.registerDecoder({
+    id: '${id}',
+    name: '${name}',
+    priority: 200,
+    excludeFromAuto: true,
+    canDecode: function () { return false; },
+    decode: function () { return { eventType: '${id}', decoded: { _encoderOnly: true } }; },
+    encoders: [
+      {
+        id: 'downlink',
+        name: 'Send Command',
+        defaultPort: 1,
+        schema: [
+          ${hasCommands ? `{ key: 'command', label: 'Command', type: 'select', required: true, options: [
+          ${cmdOptions}
+          ]},
+          { key: 'value', label: 'Value (number, true/false, or JSON object)', type: 'text', placeholder: 'e.g. 20 or true or {"min":15,"max":25}', default: '' },` : `{ key: 'payload', label: 'Payload (JSON object)', type: 'text', placeholder: '{}', default: '{}' },`}
+          { key: 'port', label: 'Port', type: 'number', default: 1 }
+        ],
+        encode: function (params) {
+          var port = parseInt(params.port, 10) || 1;
+          var pl;
+          ${hasCommands ? `var cmd = params.command || '';
+          var valStr = (params.value || '').trim();
+          var val;
+          if (valStr === '' || valStr === '""') { val = ''; }
+          else if (valStr === 'true') { val = true; }
+          else if (valStr === 'false') { val = false; }
+          else if (!isNaN(Number(valStr)) && valStr !== '') { val = Number(valStr); }
+          else { try { val = JSON.parse(valStr); } catch (e) { val = valStr; } }
+          pl = {};
+          if (cmd) { pl[cmd] = (val === '' || val === undefined) ? '' : val; }` : `try { pl = JSON.parse(params.payload || '{}'); } catch (e) { pl = {}; }`}
+          var out = Encoder(pl, port);
+          var bytes = Array.isArray(out) ? out : (out && out.bytes) ? out.bytes : [];
+          var hex = bytes.map(function (b) { return ('0' + ((b) & 0xff).toString(16)).slice(-2); }).join('');
+          var b64 = btoa(String.fromCharCode.apply(null, bytes));
+          return { port: port, data_hex: hex, data_base64: b64 };
+        }
+      }
+    ]
+  });
+})();\n`;
+            }
+
+            if (format === 'chirpstack_downlink') {
+                // Extract command names from case statements in the encoder
+                const caseMatches = code.match(/case\s+["']([^"']+)["']\s*:/g) || [];
+                const commands = caseMatches.map(m => m.match(/["']([^"']+)["']/)[1]);
+                const uniqueCommands = [...new Set(commands)].sort();
+                
+                // Build command options for dropdown
+                const cmdOptions = uniqueCommands.map(cmd => `{ value: '${cmd}', label: '${cmd}' }`).join(',\n          ');
+                
+                return `(function () {
+  'use strict';
+  if (!window.RBTDecoders) return;
+${code}
+  // Commands extracted from encoder: ${uniqueCommands.join(', ') || 'none detected'}
+  window.RBTDecoders.registerDecoder({
+    id: '${id}',
+    name: '${name}',
+    priority: 200,
+    excludeFromAuto: true,
+    canDecode: function () { return false; },
+    decode: function () { return { eventType: '${id}', decoded: { _encoderOnly: true } }; },
+    encoders: [
+      {
+        id: 'downlink',
+        name: 'Send Command',
+        defaultPort: 1,
+        schema: [
+          { key: 'command', label: 'Command', type: 'select', required: true, options: [
+          ${cmdOptions || "{ value: 'custom', label: 'Custom JSON' }"}
+          ]},
+          { key: 'value', label: 'Value (number, true/false, or JSON object)', type: 'text', placeholder: 'e.g. 20 or true or {"min":15,"max":25}', default: '' },
+          { key: 'fPort', label: 'fPort', type: 'number', default: 1 }
+        ],
+        encode: function (params) {
+          var cmd = params.command || '';
+          var valStr = (params.value || '').trim();
+          var val;
+          // Parse value: try number, boolean, JSON object, or string
+          if (valStr === '' || valStr === '""') {
+            val = '';
+          } else if (valStr === 'true') {
+            val = true;
+          } else if (valStr === 'false') {
+            val = false;
+          } else if (!isNaN(Number(valStr)) && valStr !== '') {
+            val = Number(valStr);
+          } else {
+            try { val = JSON.parse(valStr); } catch (e) { val = valStr; }
+          }
+          var data = {};
+          if (cmd) {
+            data[cmd] = (val === '' || val === undefined) ? '' : val;
+          }
+          var fPort = parseInt(params.fPort, 10) || 1;
+          var out = encodeDownlink({ data: data, fPort: fPort });
+          var bytes = (out && out.bytes) ? out.bytes : (Array.isArray(out) ? out : []);
+          var hex = bytes.map(function (b) { return ('0' + ((b) & 0xff).toString(16)).slice(-2); }).join('');
+          var b64 = btoa(String.fromCharCode.apply(null, bytes));
+          return { port: fPort, data_hex: hex, data_base64: b64 };
+        }
+      }
+    ]
+  });
+})();\n`;
+            }
+
             throw new Error('Unknown format for wrapping');
         }
 
-        function wrapOrFix() {
-            clearStatus();
-            const filename = normalizeFilename(document.getElementById('decoderName').value);
-            const formatSel = document.getElementById('decoderFormat').value;
-            const code = document.getElementById('decoderCode').value || '';
-
-            if (!filename) {
-                showStatus('err', 'Enter a filename first (used to derive decoder id).');
-                return;
-            }
-            if (!code.trim()) {
-                showStatus('err', 'Paste decoder code first.');
-                return;
-            }
-            if (looksLikeNodeModule(code)) {
-                showStatus('err', 'This looks like a Node/CommonJS module (uses require/exports). Browser decoders must be plain JS without require/exports. Please remove those parts or paste only the pure decode functions.');
-                return;
-            }
-
+        /** Wrap code as Sensor Toolkit plugin if not already. Used on save/test-load. */
+        function wrapIfNeeded(code, filename, formatSel, isEncoder) {
             const detected = detectFormat(code);
             const format = (formatSel === 'auto') ? detected : formatSel;
-            if (format === 'unknown') {
-                showStatus('err', 'Could not auto-detect format. Choose a Format (TTN Decoder / ChirpStack decodeUplink / Plugin) and try again.');
-                return;
+            if (isEncoder) {
+                const encoderFormats = ['rbt_plugin', 'ttn_encoder', 'chirpstack_downlink'];
+                if (encoderFormats.indexOf(format) < 0) {
+                    if (formatSel === 'auto' && (detected === 'unknown' || encoderFormats.indexOf(detected) < 0))
+                        throw new Error('Could not detect encoder format. Choose TTN Encoder, ChirpStack encodeDownlink, or RBT plugin.');
+                    throw new Error('Encoder expects TTN Encoder, ChirpStack encodeDownlink, or RBT plugin.');
+                }
+            } else {
+                if (format === 'unknown') {
+                    if (formatSel === 'auto')
+                        throw new Error('Could not auto-detect format. Choose a Format (decoder or encoder).');
+                    throw new Error('Unknown format.');
+                }
             }
-            if (formatSel === 'auto' && detected === 'unknown') {
-                showStatus('err', 'Auto-detect failed. Please pick a Format.');
-                return;
-            }
-
-            try {
-                const wrapped = wrapAsPlugin(format, filename, code);
-                document.getElementById('decoderCode').value = wrapped;
-                showStatus('ok', `Wrapped as Sensor Toolkit plugin. Decoder id will be "${normalizeIdFromFilename(filename)}".`);
-            } catch (e) {
-                showStatus('err', String(e && e.message ? e.message : e));
-            }
+            if (format === 'rbt_plugin') return { wrapped: code, format };
+            return { wrapped: wrapAsPlugin(format, filename, code), format };
         }
 
         async function refreshList() {
@@ -503,34 +645,204 @@ ${helpers}
                 showStatus('err', 'Choose a .js file first.');
                 return;
             }
-            const form = new FormData();
-            form.append('file', file);
-            const res = await fetch('/api/decoders/upload', { method: 'POST', body: form });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                showStatus('err', data.error || 'Upload failed.');
+            const filename = normalizeFilename(file.name);
+            if (!filename) {
+                showStatus('err', 'Invalid filename.');
                 return;
             }
-            showStatus('ok', `Uploaded: ${data.name}`);
-            await refreshList();
+            try {
+                const content = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result || '');
+                    reader.onerror = () => reject(reader.error || new Error('Failed to read file.'));
+                    reader.readAsText(file);
+                });
+                const code = String(content || '');
+                if (!code.trim()) {
+                    showStatus('err', 'File is empty.');
+                    return;
+                }
+                if (looksLikeNodeModule(code)) {
+                    showStatus('err', 'This looks like a Node/CommonJS module (uses require/exports). Browser decoders must be plain JS without require/exports.');
+                    return;
+                }
+
+                const detected = detectFormat(code);
+                const format = detected === 'unknown' ? 'rbt_plugin' : detected;
+
+                let wrapped;
+                try {
+                    wrapped = wrapAsPlugin(format, filename, code);
+                } catch (e) {
+                    showStatus('err', String(e && e.message ? e.message : e));
+                    return;
+                }
+
+                const res = await fetch('/api/decoders/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: filename, content: wrapped }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    showStatus('err', data.error || 'Upload failed.');
+                    return;
+                }
+                const msgSuffix =
+                    detected === 'ttn_decoder'
+                        ? ' (auto-wrapped from TTN Decoder)'
+                        : detected === 'chirpstack_uplink'
+                        ? ' (auto-wrapped from ChirpStack decodeUplink)'
+                        : detected === 'ttn_encoder'
+                        ? ' (auto-wrapped from TTN Encoder)'
+                        : detected === 'chirpstack_downlink'
+                        ? ' (auto-wrapped from ChirpStack encodeDownlink)'
+                        : '';
+                showStatus('ok', 'Saved: ' + (data.name || filename) + msgSuffix);
+                // Clear form after successful upload
+                fileInput.value = '';
+                await refreshList();
+            } catch (e) {
+                showStatus('err', String(e && e.message ? e.message : e));
+            }
+        }
+
+        async function saveEncoder() {
+            clearStatus();
+            const name = normalizeFilename(document.getElementById('encoderName').value);
+            const content = (document.getElementById('encoderCode') && document.getElementById('encoderCode').value || '').trim();
+            const formatSel = document.getElementById('encoderFormat').value;
+            if (!name) {
+                showStatus('err', 'Enter a filename (e.g. my_encoder.js).');
+                return;
+            }
+            if (!content) {
+                showStatus('err', 'Paste encoder code first.');
+                return;
+            }
+            if (looksLikeNodeModule(content)) {
+                showStatus('err', 'Node/CommonJS (require/exports) is not supported. Use plain JS.');
+                return;
+            }
+            let toSave;
+            try {
+                const r = wrapIfNeeded(content, name, formatSel, true);
+                toSave = r.wrapped;
+            } catch (e) {
+                showStatus('err', String(e && e.message ? e.message : e));
+                return;
+            }
+            try {
+                const res = await fetch('/api/decoders/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, content: toSave }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    showStatus('err', data.error || 'Save failed.');
+                    return;
+                }
+                showStatus('ok', 'Encoder saved: ' + (data.name || name));
+                document.getElementById('encoderName').value = '';
+                document.getElementById('encoderCode').value = '';
+                document.getElementById('encoderFormat').selectedIndex = 0;
+                await refreshList();
+            } catch (e) {
+                showStatus('err', String(e && e.message ? e.message : e));
+            }
+        }
+
+        async function uploadEncoder() {
+            clearStatus();
+            const fileInput = document.getElementById('encoderFile');
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) {
+                showStatus('err', 'Choose an encoder .js file first.');
+                return;
+            }
+            const filename = normalizeFilename(file.name);
+            if (!filename) {
+                showStatus('err', 'Invalid filename.');
+                return;
+            }
+            try {
+                const content = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result || '');
+                    reader.onerror = () => reject(reader.error || new Error('Failed to read file.'));
+                    reader.readAsText(file);
+                });
+                const code = String(content || '');
+                if (!code.trim()) {
+                    showStatus('err', 'File is empty.');
+                    return;
+                }
+                if (looksLikeNodeModule(code)) {
+                    showStatus('err', 'Node/CommonJS (require/exports) is not supported.');
+                    return;
+                }
+                const detected = detectFormat(code);
+                const encoderFormats = ['rbt_plugin', 'ttn_encoder', 'chirpstack_downlink'];
+                const format = encoderFormats.indexOf(detected) >= 0 ? detected : 'rbt_plugin';
+                let wrapped;
+                try {
+                    wrapped = format === 'rbt_plugin' ? code : wrapAsPlugin(format, filename, code);
+                } catch (e) {
+                    showStatus('err', String(e && e.message ? e.message : e));
+                    return;
+                }
+                const res = await fetch('/api/decoders/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: filename, content: wrapped }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    showStatus('err', data.error || 'Upload failed.');
+                    return;
+                }
+                const msg = format === 'rbt_plugin'
+                    ? 'Saved encoder plugin: ' + (data.name || filename)
+                    : 'Saved encoder (wrapped from ' + format + '): ' + (data.name || filename);
+                showStatus('ok', msg);
+                // Clear file input after successful upload
+                fileInput.value = '';
+                await refreshList();
+            } catch (e) {
+                showStatus('err', String(e && e.message ? e.message : e));
+            }
         }
 
         async function saveFromTextbox() {
             clearStatus();
             const name = normalizeFilename(document.getElementById('decoderName').value);
-            const content = document.getElementById('decoderCode').value || '';
+            const content = (document.getElementById('decoderCode').value || '').trim();
+            const formatSel = document.getElementById('decoderFormat').value;
             if (!name) {
                 showStatus('err', 'Enter a filename (e.g. my_decoder.js).');
                 return;
             }
-            if (!content.trim()) {
-                showStatus('err', 'Paste decoder JavaScript code first.');
+            if (!content) {
+                showStatus('err', 'Paste decoder or encoder code first.');
+                return;
+            }
+            if (looksLikeNodeModule(content)) {
+                showStatus('err', 'Node/CommonJS (require/exports) is not supported. Use plain JS.');
+                return;
+            }
+            let toSave;
+            try {
+                const r = wrapIfNeeded(content, name, formatSel, false);
+                toSave = r.wrapped;
+            } catch (e) {
+                showStatus('err', String(e && e.message ? e.message : e));
                 return;
             }
             const res = await fetch('/api/decoders/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, content }),
+                body: JSON.stringify({ name, content: toSave }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
@@ -538,19 +850,35 @@ ${helpers}
                 return;
             }
             showStatus('ok', `Saved: ${data.name}`);
+            document.getElementById('decoderName').value = '';
+            document.getElementById('decoderCode').value = '';
+            document.getElementById('decoderFormat').selectedIndex = 0;
             await refreshList();
         }
 
         function testLoad() {
             clearStatus();
-            const content = document.getElementById('decoderCode').value || '';
-            if (!content.trim()) {
-                showStatus('err', 'Paste decoder JavaScript code first.');
+            const content = (document.getElementById('decoderCode').value || '').trim();
+            const filename = normalizeFilename(document.getElementById('decoderName').value) || 'test.js';
+            const formatSel = document.getElementById('decoderFormat').value;
+            if (!content) {
+                showStatus('err', 'Paste decoder or encoder code first.');
+                return;
+            }
+            if (looksLikeNodeModule(content)) {
+                showStatus('err', 'Node/CommonJS (require/exports) is not supported.');
+                return;
+            }
+            let toRun;
+            try {
+                const r = wrapIfNeeded(content, filename, formatSel, false);
+                toRun = r.wrapped;
+            } catch (e) {
+                showStatus('err', String(e && e.message ? e.message : e));
                 return;
             }
             try {
-                // Load into this page only via blob script
-                const blob = new Blob([content], { type: 'text/javascript' });
+                const blob = new Blob([toRun], { type: 'text/javascript' });
                 const url = URL.createObjectURL(blob);
                 const s = document.createElement('script');
                 s.src = url;
@@ -587,12 +915,17 @@ ${helpers}
         }
 
         document.getElementById('uploadBtn').addEventListener('click', uploadFile);
-        document.getElementById('wrapBtn').addEventListener('click', wrapOrFix);
         document.getElementById('saveBtn').addEventListener('click', saveFromTextbox);
         document.getElementById('testBtn').addEventListener('click', testLoad);
         document.getElementById('refreshBtn').addEventListener('click', refreshList);
         if (document.getElementById('runDecoderTestBtn')) {
             document.getElementById('runDecoderTestBtn').addEventListener('click', runDecoderTest);
+        }
+        if (document.getElementById('uploadEncoderBtn')) {
+            document.getElementById('uploadEncoderBtn').addEventListener('click', uploadEncoder);
+        }
+        if (document.getElementById('saveEncoderBtn')) {
+            document.getElementById('saveEncoderBtn').addEventListener('click', saveEncoder);
         }
 
         populateDecoderTesterDropdown();
