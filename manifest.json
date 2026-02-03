@@ -1,7 +1,7 @@
 {
   "AppName": "Sensor Toolkit",
-  "AppVersion": "1.9.0",
+  "AppVersion": "1.10.0",
   "AppDescription": "MQTT uplink monitor + pluggable payload decoders + sensor visualization + RadioBridge configuration/downlinks + cloud integrations. Import gateway JSON history on uplinks page.",
-  "AppVersionNotes": "Uplinks: Import history — upload gateway JSON to merge packets into cache (table, decode, export). Removed SQLite/storage; uplink cache is IndexedDB only. Cleanup: GPT, tools_downlinks redirect, bar-chart icon, orphan NetworkDashboard mqtt_utils/config.",
+  "AppVersionNotes": "Sensors: Customize charts — choose which series to show (add/remove) and chart type (line or bar) per sensor; preferences saved in localStorage.",
   "PersistentStorage": true
 }
