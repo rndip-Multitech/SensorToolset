@@ -463,6 +463,24 @@
                             </label>
                         </div>
                     </div>
+                    <div class="form-group" style="margin-top: 12px;">
+                        <details>
+                            <summary style="cursor: pointer; font-weight: bold;">Certificates (optional)</summary>
+                            <p class="hint" style="margin: 8px 0;">Paste PEM content for TLS. Leave empty to use system CA or skip verify.</p>
+                            <div class="form-group">
+                                <label for="mqttCaCert">CA certificate (PEM)</label>
+                                <textarea id="mqttCaCert" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style="width:100%; max-width:500px; padding:8px; border:1px solid #ddd; border-radius:4px; font-family:monospace; font-size:12px;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqttClientCert">Client certificate (PEM, for mutual TLS)</label>
+                                <textarea id="mqttClientCert" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style="width:100%; max-width:500px; padding:8px; border:1px solid #ddd; border-radius:4px; font-family:monospace; font-size:12px;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqttClientKey">Client key (PEM, for mutual TLS)</label>
+                                <textarea id="mqttClientKey" rows="3" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="width:100%; max-width:500px; padding:8px; border:1px solid #ddd; border-radius:4px; font-family:monospace; font-size:12px;"></textarea>
+                            </div>
+                        </details>
+                    </div>
                 </div>
 
                 <!-- UDP Config -->
@@ -628,6 +646,9 @@
                 document.getElementById('mqttQos').value = cfg.qos || 1;
                 document.getElementById('mqttTls').checked = cfg.use_tls || false;
                 document.getElementById('mqttSkipSsl').checked = cfg.skip_ssl_verify || false;
+                document.getElementById('mqttCaCert').value = cfg.mqtt_ca_cert_pem || '';
+                document.getElementById('mqttClientCert').value = cfg.mqtt_client_cert_pem || '';
+                document.getElementById('mqttClientKey').value = cfg.mqtt_client_key_pem || '';
             } else if (integ.type === 'udp') {
                 document.getElementById('udpHost').value = cfg.host || '';
                 document.getElementById('udpPort').value = cfg.port || '';
@@ -693,6 +714,9 @@
                 integ.config.qos = parseInt(document.getElementById('mqttQos').value) || 1;
                 integ.config.use_tls = document.getElementById('mqttTls').checked;
                 integ.config.skip_ssl_verify = document.getElementById('mqttSkipSsl').checked;
+                integ.config.mqtt_ca_cert_pem = document.getElementById('mqttCaCert').value.trim();
+                integ.config.mqtt_client_cert_pem = document.getElementById('mqttClientCert').value.trim();
+                integ.config.mqtt_client_key_pem = document.getElementById('mqttClientKey').value.trim();
             } else if (type === 'udp') {
                 integ.config.host = document.getElementById('udpHost').value.trim();
                 integ.config.port = parseInt(document.getElementById('udpPort').value) || 0;

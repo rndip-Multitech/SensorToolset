@@ -18,7 +18,8 @@
         .schema-field input, .schema-field select { width: 100%; max-width: 400px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
         .mono { font-family: ui-monospace, monospace; font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px; word-break: break-all; }
         .mode-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-        .mode-tabs button { padding: 10px 20px; border: 1px solid #ddd; background: #fff; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .mode-tabs button { padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .mode-tabs button:hover { background: #f0f0f0; color: #333; }
         .mode-tabs button.active { background: #00394d; color: #fff; border-color: #00394d; }
         .mode-panel { display: none; }
         .mode-panel.active { display: block; }
@@ -473,6 +474,26 @@
         loadCustomDecodersOnce().then(() => {
             populateCodecs();
         });
+
+        // When arriving from RadioBridge config "Schedule Downlink", pre-fill raw hex and show where to send it
+        (function applyHexcodeFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const hexcode = params.get('hexcode');
+            if (!hexcode || !hexcode.trim()) return;
+            const normalized = hexcode.trim().replace(/\s/g, '').replace(/^0x/i, '');
+            if (!/^[0-9a-fA-F]*$/.test(normalized)) return;
+            setMode('raw');
+            const rawHexEl = document.getElementById('rawHex');
+            const rawBase64El = document.getElementById('rawBase64');
+            if (rawHexEl) {
+                rawHexEl.value = normalized;
+                rawHexEl.focus();
+            }
+            if (rawBase64El) rawBase64El.value = '';
+            showStatus('ok', 'Hex from RadioBridge config loaded. Select a device above, then click "Send Raw Downlink" to send.');
+            document.getElementById('panelRaw').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+        })();
     </script>
 </body>
 </html>

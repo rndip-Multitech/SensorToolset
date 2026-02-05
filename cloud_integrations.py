@@ -16,6 +16,7 @@ import os
 import queue
 import socket
 import ssl
+import tempfile
 import threading
 import time
 import urllib.request
@@ -40,6 +41,9 @@ _worker_running = False
 # Active connections (for TCP/MQTT)
 _connections: Dict[str, Any] = {}
 _connections_lock = threading.Lock()
+
+# Temp files for MQTT TLS certs (PEM content written to disk for paho-mqtt); cleaned on disconnect
+_mqtt_cert_temp_files: Dict[str, List[str]] = {}
 
 # MQTT client (optional import)
 try:
@@ -286,6 +290,27 @@ def _forward_webhook(integration: Dict[str, Any], payload: Dict[str, Any]) -> bo
         return False
 
 
+def _write_pem_temp_file(integration_id: str, pem_content: str, prefix: str) -> Optional[str]:
+    """Write PEM content to a temp file; track it for cleanup. Returns path or None."""
+    if not pem_content or not pem_content.strip():
+        return None
+    try:
+        fd, path = tempfile.mkstemp(suffix=".pem", prefix=f"rbt_mqtt_{prefix}_")
+        try:
+            os.write(fd, pem_content.strip().encode("utf-8"))
+        finally:
+            os.close(fd)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        _mqtt_cert_temp_files.setdefault(integration_id, []).append(path)
+        return path
+    except Exception as e:
+        logger.warning(f"Failed to write MQTT cert temp file {prefix}: {e}")
+        return None
+
+
 def _forward_mqtt(integration: Dict[str, Any], payload: Dict[str, Any]) -> bool:
     """Forward payload to external MQTT broker."""
     if not PAHO_AVAILABLE:
@@ -317,9 +342,29 @@ def _forward_mqtt(integration: Dict[str, Any], payload: Dict[str, Any]) -> bool:
                 if username:
                     client.username_pw_set(username, password)
                 
-                # TLS
+                # TLS with optional certificates (CA, client cert, client key)
                 if cfg.get("use_tls", False):
-                    client.tls_set()
+                    ca_pem = (cfg.get("mqtt_ca_cert_pem") or "").strip()
+                    client_cert_pem = (cfg.get("mqtt_client_cert_pem") or "").strip()
+                    client_key_pem = (cfg.get("mqtt_client_key_pem") or "").strip()
+                    ca_path = _write_pem_temp_file(integration_id, ca_pem, "ca") if ca_pem else None
+                    cert_path = _write_pem_temp_file(integration_id, client_cert_pem, "cert") if client_cert_pem else None
+                    key_path = _write_pem_temp_file(integration_id, client_key_pem, "key") if client_key_pem else None
+                    if cert_path and not key_path:
+                        logger.warning("MQTT: client certificate set without key; ignoring client cert")
+                        cert_path = key_path = None
+                    elif key_path and not cert_path:
+                        logger.warning("MQTT: client key set without certificate; ignoring client key")
+                        cert_path = key_path = None
+                    if ca_path or cert_path:
+                        client.tls_set(
+                            ca_certs=ca_path,
+                            certfile=cert_path,
+                            keyfile=key_path,
+                            cert_reqs=ssl.CERT_NONE if cfg.get("skip_ssl_verify", False) else ssl.CERT_REQUIRED,
+                        )
+                    else:
+                        client.tls_set()
                     if cfg.get("skip_ssl_verify", False):
                         client.tls_insecure_set(True)
                 
@@ -331,6 +376,12 @@ def _forward_mqtt(integration: Dict[str, Any], payload: Dict[str, Any]) -> bool:
                 time.sleep(0.2)
             except Exception as e:
                 logger.warning(f"MQTT integration {integration.get('name')} connect failed: {e}")
+                # Clean up temp cert files on connect failure
+                for p in _mqtt_cert_temp_files.pop(integration_id, []):
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
                 return False
     
     try:
@@ -428,10 +479,16 @@ def _disconnect_integration(integration_id: str):
             try:
                 _connections[mqtt_key].loop_stop()
                 _connections[mqtt_key].disconnect()
-            except:
+            except Exception:
                 pass
             del _connections[mqtt_key]
-        
+        # Remove temp cert files for this MQTT integration
+        for path in _mqtt_cert_temp_files.pop(integration_id, []):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
         # TCP
         tcp_key = f"tcp_{integration_id}"
         if tcp_key in _connections:

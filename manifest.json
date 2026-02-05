@@ -1,7 +1,7 @@
 {
   "AppName": "Sensor Toolkit",
-  "AppVersion": "1.10.0",
+  "AppVersion": "1.11.0",
   "AppDescription": "MQTT uplink monitor + pluggable payload decoders + sensor visualization + RadioBridge configuration/downlinks + cloud integrations. Import gateway JSON history on uplinks page.",
-  "AppVersionNotes": "Sensors: Customize charts — choose which series to show (add/remove) and chart type (line or bar) per sensor; preferences saved in localStorage.",
+  "AppVersionNotes": "Cloud: MQTT integration supports CA/client certs (PEM). Sensors: field visibility rules (exclude/include per decoder). Downlinks: hex from RadioBridge config pre-fills Raw tab; mode tab labels readable.",
   "PersistentStorage": true
 }

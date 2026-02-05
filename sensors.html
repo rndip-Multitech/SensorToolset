@@ -308,6 +308,55 @@
             border-radius: 4px;
             min-width: 72px;
         }
+        .field-rules-panel {
+            margin-bottom: 20px;
+            padding: 12px 16px;
+            background: #f0f4f8;
+            border: 1px solid #c5d4e0;
+            border-radius: 8px;
+        }
+        .field-rules-panel summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #333;
+            user-select: none;
+        }
+        .field-rules-row {
+            margin-top: 10px;
+        }
+        .field-rules-row label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 4px;
+        }
+        .field-rules-row input[type="text"] {
+            width: 100%;
+            max-width: 480px;
+            padding: 6px 10px;
+            font-size: 13px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .field-rules-row input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        .field-rules-apply {
+            margin-top: 12px;
+        }
+        .field-rules-apply button {
+            padding: 8px 16px;
+            font-size: 14px;
+            background: #00394d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .field-rules-apply button:hover {
+            background: #004d66;
+        }
         .no-data {
             text-align: center;
             padding: 40px;
@@ -456,6 +505,45 @@
         let dateFilter = { from: null, to: null };
         let activeQuickRange = ''; // '1h'|'24h'|'7d'|'30d'|'all'|''
         const CHART_PREFS_KEY = 'sensorChartPrefs';
+        const FIELD_RULES_KEY = 'sensorFieldRules';
+
+        function getFieldRules() {
+            try {
+                const raw = localStorage.getItem(FIELD_RULES_KEY);
+                const o = raw ? JSON.parse(raw) : {};
+                return {
+                    globalExclude: Array.isArray(o.globalExclude) ? o.globalExclude : [],
+                    decoderExclude: o.decoderExclude && typeof o.decoderExclude === 'object' ? o.decoderExclude : {},
+                    decoderIncludeOnly: o.decoderIncludeOnly && typeof o.decoderIncludeOnly === 'object' ? o.decoderIncludeOnly : {}
+                };
+            } catch (e) {
+                return { globalExclude: [], decoderExclude: {}, decoderIncludeOnly: {} };
+            }
+        }
+
+        function saveFieldRules(rules) {
+            try {
+                localStorage.setItem(FIELD_RULES_KEY, JSON.stringify(rules));
+            } catch (e) {
+                console.warn('Could not save field rules:', e);
+            }
+        }
+
+        /** Given extracted numeric keys and decoderId, return keys that pass user field rules (and built-in exclude is already applied in extractNumericValues). */
+        function filterNumericKeysByFieldRules(numericKeys, decoderId) {
+            const rules = getFieldRules();
+            const inc = rules.decoderIncludeOnly[decoderId];
+            const decEx = rules.decoderExclude[decoderId] || [];
+            const globalEx = rules.globalExclude || [];
+            const toLower = (s) => (String(s || '').trim().toLowerCase());
+            const excludeSet = new Set([...globalEx.map(toLower).filter(Boolean), ...decEx.map(toLower).filter(Boolean)]);
+            let keys = numericKeys.slice();
+            if (inc && inc.length > 0) {
+                const incSet = new Set(inc.map(toLower).filter(Boolean));
+                keys = keys.filter((k) => incSet.has(k.toLowerCase()));
+            }
+            return keys.filter((k) => !excludeSet.has(k.toLowerCase()));
+        }
 
         function getChartPrefs(deveui) {
             try {
@@ -699,8 +787,9 @@
             decoded = normalizeDecoded(decoded);
             if (!decoded || typeof decoded !== 'object') return values;
 
-            const graphableFields = ['temperature', 'temp', 'humidity', 'hum', 'battery', 'voltage', 
-                                   'rssi', 'snr', 'angle', 'distance', 'level', 'pressure', 
+            // Built-in exclude only. New/unknown decoders: any numeric not in EXCLUDED is included so users can then exclude via Field visibility rules.
+            const graphableHints = ['temperature', 'temp', 'humidity', 'hum', 'battery', 'voltage',
+                                   'rssi', 'snr', 'angle', 'distance', 'level', 'pressure',
                                    'lux', 'light', 'current', 'value', 'measurement',
                                    'celsius', 'fahrenheit', 'count', 'sequence', 'history', 'flood'];
 
@@ -714,8 +803,7 @@
                 }
 
                 if (typeof val === 'number') {
-                    // Double-check exclusion (case-insensitive) - check all variations
-                    const isExcluded = EXCLUDED_FIELDS.has(keyLower) || 
+                    const isExcluded = EXCLUDED_FIELDS.has(keyLower) ||
                                      EXCLUDED_FIELDS.has(fullKey.toLowerCase()) ||
                                      EXCLUDED_FIELDS.has(key) ||
                                      keyLower === 'historystart' || keyLower === 'history_start' ||
@@ -723,15 +811,9 @@
                                      keyLower.includes('historycount') || keyLower.includes('history_count') ||
                                      keyLower.includes('subband') || keyLower.includes('sub_band') || keyLower.includes('subbands') || keyLower.includes('sub_bands') ||
                                      (keyLower.includes('accumulation') && keyLower.includes('count'));
-                    
-                    if (!isExcluded) {
-                        if (graphableFields.some(f => keyLower.includes(f)) || 
-                            (keyLower !== 'id' && !keyLower.includes('port') && 
-                             !keyLower.includes('history') && !keyLower.includes('subbands') &&
-                             !(keyLower.includes('accumulation') && keyLower.includes('count')))) {
-                            values[fullKey] = val;
-                        }
-                    }
+                    if (isExcluded) continue;
+                    // Include any numeric not in built-in exclude so new/unknown decoders get all numerics; user can exclude via Field visibility rules.
+                    values[fullKey] = val;
                 } else if (typeof val === 'object' && val !== null) {
                     // Handle Sensative Strips report structures: BatteryReport: { value: 99, unit: "%" }
                     if (val.value !== undefined && typeof val.value === 'number') {
@@ -805,7 +887,7 @@
                     const num = parseFloat(val);
                     if (!isNaN(num) && isFinite(num)) {
                         values[fullKey] = num;
-                    } else if (graphableFields.some(f => keyLower.includes(f))) {
+                    } else if (graphableHints.some((f) => keyLower.includes(f))) {
                         const match = val.match(/-?\d+\.?\d*/);
                         if (match) {
                             const extracted = parseFloat(match[0]);
@@ -1663,35 +1745,25 @@
                     console.log(`  Extracted binary fields:`, Object.keys(binary));
                 }
 
+                // Apply user field visibility rules (exclude / include-only per decoder); RadioBridge keeps hardcoded behavior, user rules apply on top.
+                const numericKeysNoRf = Object.keys(numeric).filter((k) => {
+                    const l = k.toLowerCase();
+                    return l !== 'rssi' && l !== 'snr';
+                });
+                const allowedNumericKeys = filterNumericKeysByFieldRules(numericKeysNoRf, decoderId || '');
                 // Store fields with their display names to prevent duplicates
-                // For Sensative Strips, we've already normalized the keys (BatteryReport -> Battery, etc.)
-                Object.keys(numeric).forEach(k => {
+                allowedNumericKeys.forEach((k) => {
                     const kLower = k.toLowerCase();
-                    // Skip RSSI and SNR - they're handled separately as signal quality charts
-                    if (kLower === 'rssi' || kLower === 'snr') {
-                        return;
-                    }
-                    // Double-check exclusion before adding to map - check all variations
-                    const isExcluded = EXCLUDED_FIELDS.has(kLower) || 
+                    const isExcluded = EXCLUDED_FIELDS.has(kLower) ||
                                      EXCLUDED_FIELDS.has(k) ||
-                                     k === 'historyStart' || kLower === 'historystart' || kLower === 'history_start' ||
-                                     k === 'historyPosition' || kLower === 'historyposition' || kLower === 'history_position' ||
+                                     k === 'historyStart' || kLower === 'historystart' || kLower === 'history_position' ||
+                                     k === 'historyPosition' || kLower === 'historyposition' ||
                                      kLower.includes('historycount') || kLower.includes('history_count') ||
                                      kLower.includes('subband') || kLower.includes('sub_band') || kLower.includes('subbands') || kLower.includes('sub_bands') ||
                                      (kLower.includes('accumulation') && kLower.includes('count'));
-                    
-                    if (isExcluded) {
-                        if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
-                            console.log(`[Strips] Excluding field from graphs: ${k} (isExcluded: ${isExcluded})`);
-                        }
-                        return;
-                    }
-                    // Use the key as-is since we've already normalized in extractNumericValues
+                    if (isExcluded) return;
                     if (!numericFields.has(k)) {
-                        numericFields.set(k, k); // Map display name to itself
-                        if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
-                            console.log(`[Strips] Added numeric field to map: ${k} = ${numeric[k]}`);
-                        }
+                        numericFields.set(k, k);
                     }
                 });
                 Object.keys(binary).forEach(k => binaryFields.add(k));
@@ -2030,6 +2102,31 @@
             html += `<div class="chart-group">`;
             html += `<div class="chart-group-title">Sensor Data</div>`;
 
+            // Field visibility rules (exclude / include-only) — so new decoders work without hardcoded lists; user controls what to show.
+            const fieldRules = getFieldRules();
+            const decoderName = (window.RBTDecoders && typeof window.RBTDecoders.getDecoder === 'function' && window.RBTDecoders.getDecoder(decoderId))
+                ? (window.RBTDecoders.getDecoder(decoderId).name || decoderId) : (decoderId || 'auto');
+            const excludeForDecoder = (fieldRules.decoderExclude[decoderId] || []).join(', ');
+            const globalExcludeStr = (fieldRules.globalExclude || []).join(', ');
+            const includeOnlyStr = (fieldRules.decoderIncludeOnly[decoderId] || []).join(', ');
+            const useGlobalExclude = (fieldRules.globalExclude || []).length > 0;
+            html += `<div class="field-rules-panel" id="fieldRulesPanel" data-deveui="${deveui}" data-decoder-id="${(decoderId || '').replace(/"/g, '&quot;')}">`;
+            html += `<details><summary>Field visibility — exclude or include-only fields for this decoder</summary>`;
+            html += `<p style="font-size: 13px; color: #555; margin: 8px 0;">Decoder: <strong>${decoderName}</strong>. Use this to hide fields from charts/tables or to show only specific fields (e.g. for new sensor types).</p>`;
+            html += `<div class="field-rules-row">`;
+            html += `<label><input type="checkbox" id="fieldRulesUseGlobalExclude" ${useGlobalExclude ? 'checked' : ''}> Apply exclude list to all decoders</label>`;
+            html += `</div>`;
+            html += `<div class="field-rules-row">`;
+            html += `<label for="fieldRulesExclude">Exclude these fields (comma-separated)</label>`;
+            html += `<input type="text" id="fieldRulesExclude" placeholder="e.g. port, sequence" value="${(useGlobalExclude ? globalExcludeStr : excludeForDecoder).replace(/"/g, '&quot;')}">`;
+            html += `</div>`;
+            html += `<div class="field-rules-row">`;
+            html += `<label for="fieldRulesIncludeOnly">Include only these fields (comma-separated; leave empty for all)</label>`;
+            html += `<input type="text" id="fieldRulesIncludeOnly" placeholder="e.g. Temperature, Humidity, Battery" value="${includeOnlyStr.replace(/"/g, '&quot;')}">`;
+            html += `</div>`;
+            html += `<div class="field-rules-apply"><button type="button" id="fieldRulesApplyBtn">Apply and refresh</button></div>`;
+            html += `</details></div>`;
+
             // Customize charts panel
             if (availableFields.length > 0) {
                 html += `<div class="chart-options-panel" id="chartOptionsPanel" data-deveui="${deveui}">`;
@@ -2217,6 +2314,29 @@
                     };
                     panel.querySelectorAll('.chart-option-check').forEach(el => el.addEventListener('change', applyPrefs));
                     panel.querySelectorAll('.chart-type-select').forEach(el => el.addEventListener('change', applyPrefs));
+                }
+
+                // Field visibility rules Apply button
+                const fieldRulesPanel = document.getElementById('fieldRulesPanel');
+                const fieldRulesApplyBtn = document.getElementById('fieldRulesApplyBtn');
+                if (fieldRulesPanel && fieldRulesApplyBtn) {
+                    const deveuiForRules = fieldRulesPanel.getAttribute('data-deveui');
+                    const decoderIdForRules = fieldRulesPanel.getAttribute('data-decoder-id') || '';
+                    fieldRulesApplyBtn.addEventListener('click', () => {
+                        const useGlobal = document.getElementById('fieldRulesUseGlobalExclude') && document.getElementById('fieldRulesUseGlobalExclude').checked;
+                        const excludeRaw = (document.getElementById('fieldRulesExclude') && document.getElementById('fieldRulesExclude').value) || '';
+                        const includeOnlyRaw = (document.getElementById('fieldRulesIncludeOnly') && document.getElementById('fieldRulesIncludeOnly').value) || '';
+                        const parseList = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
+                        const rules = getFieldRules();
+                        if (useGlobal) {
+                            rules.globalExclude = parseList(excludeRaw);
+                        } else {
+                            rules.decoderExclude[decoderIdForRules] = parseList(excludeRaw);
+                        }
+                        rules.decoderIncludeOnly[decoderIdForRules] = parseList(includeOnlyRaw);
+                        saveFieldRules(rules);
+                        renderSensorDashboard(deveuiForRules);
+                    });
                 }
                 
                 console.log('Chart creation complete. Total charts:', Object.keys(currentCharts).length);
