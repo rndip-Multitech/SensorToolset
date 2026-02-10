@@ -1422,9 +1422,23 @@
 
             // Set up clear cache button
             document.getElementById('clearCacheBtn').addEventListener('click', async () => {
-                if (confirm('Clear all cached messages? This cannot be undone.')) {
+                if (confirm('Clear all cached messages? This will remove local cache and server-side uplink history.')) {
                     try {
+                        // Clear browser IndexedDB cache
                         await clearCache();
+                        // Also clear server-side persistent uplink cache
+                        try {
+                            const res = await fetch('/api/uplinks/persistent-cache/clear', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok || data.success === false) {
+                                console.warn('Server persistent cache clear failed:', data && data.message);
+                            }
+                        } catch (err) {
+                            console.warn('Error clearing server persistent cache:', err);
+                        }
                         await updateCacheStats();
                         displayCachedMessages(getActiveFilters());
                         await refreshDevEuiDropdown(false);

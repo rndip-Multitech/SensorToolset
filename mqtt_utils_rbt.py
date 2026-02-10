@@ -53,6 +53,24 @@ def _append_to_persistent_cache(msg: Dict[str, Any]) -> None:
             print(f"Uplink cache write error: {e}")
 
 
+def clear_persistent_uplink_cache() -> bool:
+    """Clear the persistent uplink cache file (JSONL). Returns True if cleared or not present."""
+    if not _UPLINK_CACHE_DIR:
+        return True
+    import os
+    path = os.path.join(_UPLINK_CACHE_DIR, _UPLINK_CACHE_FILE)
+    with _cache_write_lock:
+        try:
+            if os.path.isfile(path):
+                # Truncate the file to zero length
+                with open(path, "w", encoding="utf-8"):
+                    pass
+        except Exception as e:  # noqa: BLE001
+            print(f"Uplink cache clear error: {e}")
+            return False
+    return True
+
+
 def read_persistent_uplink_cache(limit: int = _UPLINK_CACHE_MAX_READ) -> List[Dict[str, Any]]:
     """Read the last `limit` messages from the persistent cache (newest first in list)."""
     if not _UPLINK_CACHE_DIR:
@@ -317,7 +335,22 @@ def _on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
     print(f"Received MQTT message on {topic}: {message}")
     try:
         data = json.loads(message)
-        
+
+        # Filter out "empty decoded" helper/forwarding messages that some gateways publish on
+        # topics like lorawan/<deveui-no-dashes>/up with structure:
+        # {"timestamp": ..., "deveui": "...", "raw": {...}, "decoded": null, "metadata": {...}}.
+        # These contain no payload or radio metadata and show up as noisy rows of nulls in the UI.
+        if (
+            isinstance(data, dict)
+            and data.get("decoded") is None
+            and isinstance(data.get("raw"), dict)
+            and not data["raw"].get("payload_base64")
+        ):
+            meta = data.get("metadata") or {}
+            if all(meta.get(k) is None for k in ("rssi", "snr", "freq", "dr")):
+                # Drop this message entirely (do not add to buffer or persistent cache)
+                return
+
         # Use enhanced decoder if available, otherwise fall back to basic decoder
         if isinstance(data, dict) and "data" in data:
             if ENHANCED_DECODER_AVAILABLE and 'up' in topic and data.get('data'):

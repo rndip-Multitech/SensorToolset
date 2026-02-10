@@ -74,6 +74,7 @@ try:
         get_messages,
         get_broker_config,
         read_persistent_uplink_cache,
+        clear_persistent_uplink_cache,
     )
     MQTT_AVAILABLE = True
     logger.info("MQTT utilities loaded successfully")
@@ -93,6 +94,12 @@ except ImportError as e:
     
     def send_downlink(data, broker_ip):
         return {"error": "MQTT not available. Please install paho-mqtt."}, 500
+    
+    def read_persistent_uplink_cache(limit=0):
+        return []
+    
+    def clear_persistent_uplink_cache():
+        return False
 
 # Configuration
 config = {
@@ -301,6 +308,21 @@ def get_persistent_uplink_cache_route():
     except Exception as e:
         logger.error(f"Error reading persistent uplink cache: {e}")
         return jsonify({"messages": [], "error": str(e)}), 500
+
+
+@app.route('/api/uplinks/persistent-cache/clear', methods=['POST'])
+def clear_persistent_uplink_cache_route():
+    """Clear the server-side persistent uplink cache (JSONL file)."""
+    try:
+        if not MQTT_AVAILABLE:
+            return jsonify({"success": False, "message": "MQTT utilities not available"}), 500
+        ok = clear_persistent_uplink_cache()
+        if ok:
+            return jsonify({"success": True}), 200
+        return jsonify({"success": False, "message": "Failed to clear uplink cache"}), 500
+    except Exception as e:
+        logger.error(f"Error clearing persistent uplink cache: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 @app.route('/api/decoders/list', methods=['GET'])
