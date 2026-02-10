@@ -140,28 +140,18 @@
 
     <section>
         <div class="container">
-            <h2 class="section-title">Add / Edit Decoder (JavaScript)</h2>
+            <h2 class="section-title">Add / Edit Decoder (JavaScript) <button type="button" class="help-button" onclick="alert('Add custom JavaScript decoders (uplink) and encoders (downlink). Upload .js files or paste code. Supported: TTN Decoder/Encoder, ChirpStack decodeUplink/encodeDownlink, Sensor Toolkit registerDecoder. Decoders are used on the Uplinks page; encoders appear in Send Downlinks.')" title="Help">?</button></h2>
 
             <div class="panel">
-                <h3>Upload decoder or encoder file</h3>
+                <h3>Upload decoder or encoder file <button type="button" class="help-button" onclick="alert('Upload a .js file: decoders (TTN Decoder(bytes, port), ChirpStack decodeUplink) or encoders (TTN Encoder(payload, port), ChirpStack encodeDownlink). The app auto-detects the format and wraps as needed. Already-wrapped Sensor Toolkit plugins (registerDecoder) are saved directly.')" title="Help">?</button></h3>
                 <div class="row">
                     <input type="file" id="decoderFile" accept=".js">
                     <button class="action-button" id="uploadBtn" type="button">Upload</button>
                 </div>
-                <p class="hint">
-                    Upload a <code>.js</code> file: decoders (TTN <code>Decoder(bytes, port)</code>, ChirpStack
-                    <code>decodeUplink</code>) or encoders (TTN <code>Encoder(payload, port)</code>, ChirpStack
-                    <code>encodeDownlink</code>). The app auto-detects the format and wraps as needed.
-                    Already-wrapped Sensor Toolkit plugins (<code>registerDecoder</code>) are saved directly.
-                </p>
             </div>
 
             <div class="panel">
-                <h3>Add encoder separately</h3>
-                <p class="hint" style="margin-bottom: 10px;">
-                    Encoders can live in the same file as a decoder (e.g. Sensative Strips) or in a separate file.
-                    Add encoder-only files here; they will appear in <strong>Send Downlinks</strong> as codecs.
-                </p>
+                <h3>Add encoder separately <button type="button" class="help-button" onclick="alert('Encoders can live in the same file as a decoder (e.g. Sensative Strips) or in a separate file. Add encoder-only files here; they will appear in Send Downlinks as codecs.')" title="Help">?</button></h3>
                 <div class="row">
                     <input type="file" id="encoderFile" accept=".js">
                     <button class="action-button" id="uploadEncoderBtn" type="button">Upload encoder</button>
@@ -182,7 +172,7 @@
             </div>
 
             <div class="panel">
-                <h3>Or paste decoder code</h3>
+                <h3>Or paste decoder code <button type="button" class="help-button" onclick="alert('Paste decoder or encoder code (TTN, ChirpStack, or Sensor Toolkit). The app auto-wraps as needed. Test-load runs it in this page only; Save stores it on the server (decoders go to Uplinks, encoders to Send Downlinks).')" title="Help">?</button></h3>
                 <div class="row">
                     <label for="decoderName"><strong>Filename</strong> (must end in `.js`):</label>
                     <input type="text" id="decoderName" placeholder="example_decoder.js">
@@ -198,17 +188,13 @@
                     <button class="action-button" id="saveBtn" type="button">Save</button>
                     <button class="action-button" id="testBtn" type="button">Test-load in browser</button>
                 </div>
-                <p class="hint">
-                    Paste decoder or encoder code (TTN, ChirpStack, or Sensor Toolkit). The app auto-wraps as needed. “Test-load” runs it in this page only; “Save” stores it on the server (decoders → Uplinks, encoders → Send Downlinks).
-                </p>
                 <textarea id="decoderCode" spellcheck="false" placeholder="(function () {&#10;  'use strict';&#10;  if (!window.RBTDecoders) return;&#10;  window.RBTDecoders.registerDecoder({&#10;    id: 'my_decoder',&#10;    name: 'My Decoder',&#10;    priority: 200,&#10;    canDecode: function (message) { return false; },&#10;    decode: function (message) { return { eventType: 'example', decoded: { ok: true } }; }&#10;  });&#10;})();"></textarea>
             </div>
 
             <div id="status" class="status"></div>
 
             <div class="panel">
-                <h3>Test decoder with payload (debug)</h3>
-                <p class="hint">Enter a hex or base64 payload and run a decoder to see the decoded output. Useful for debugging decoders without live uplinks.</p>
+                <h3>Test decoder with payload (debug) <button type="button" class="help-button" onclick="alert('Enter a hex or base64 payload and run a decoder to see the decoded output. Useful for debugging without live uplinks. Enter one or both; hex is used if both are set. Spaces and 0x prefixes in hex are ignored.')" title="Help">?</button></h3>
                 <div class="row" style="margin-bottom: 10px;">
                     <label for="testDecoderSelect"><strong>Decoder</strong>:</label>
                     <select id="testDecoderSelect" class="decoder-select" style="min-width: 220px;"></select>
@@ -223,7 +209,6 @@
                     <label for="testPayloadBase64"><strong>Payload (base64)</strong></label>
                     <textarea id="testPayloadBase64" rows="2" placeholder="e.g. AgFkAAo=" style="min-height: 50px; margin-top: 4px;"></textarea>
                 </div>
-                <p class="hint">Enter one or both; hex is used if both are set. Spaces and 0x prefixes in hex are ignored.</p>
                 <div class="row" style="margin-top: 10px;">
                     <button class="action-button" id="runDecoderTestBtn" type="button">Run decoder</button>
                 </div>
@@ -235,7 +220,7 @@
 
             <div class="panel">
                 <div class="row" style="justify-content: space-between;">
-                    <h3 style="margin: 0;">Installed custom decoders</h3>
+                    <h3 style="margin: 0;">Installed custom decoders <button type="button" class="help-button" onclick="alert('After adding a decoder, open the Uplinks page and select it in the decoder dropdown (Auto / Default / Per-DevEUI).')" title="Help">?</button></h3>
                     <button class="action-button" id="refreshBtn" type="button">Refresh</button>
                 </div>
                 <table>
@@ -252,9 +237,6 @@
                         <tr><td colspan="5" style="text-align:center; padding: 16px;">Loading…</td></tr>
                     </tbody>
                 </table>
-                <p class="hint">
-                    After adding a decoder, open `uplinks.html` and select it in the decoder dropdown (Auto/Default/Per-DevEUI).
-                </p>
             </div>
         </div>
     </section>
@@ -377,8 +359,15 @@
             return id || 'custom_decoder';
         }
 
+        function stripComments(code) {
+            if (!code || typeof code !== 'string') return '';
+            let s = code.replace(/\/\*[\s\S]*?\*\//g, '');
+            s = s.replace(/\/\/[^\n]*/g, '');
+            return s;
+        }
         function looksLikeNodeModule(code) {
-            return /\brequire\s*\(|\bmodule\.exports\b|\bexports\./.test(code);
+            const codeWithoutComments = stripComments(code);
+            return /\brequire\s*\(|\bmodule\.exports\b|\bexports\./.test(codeWithoutComments);
         }
 
         function detectFormat(code) {
@@ -606,6 +595,25 @@ ${code}
             return { wrapped: wrapAsPlugin(format, filename, code), format };
         }
 
+        var loadedCustomDecoderUrls = new Set();
+        function loadCustomDecodersIfNeeded(files) {
+            const urls = (files || []).map(function (f) { return f.url || ('/decoders/custom/' + f.name); }).filter(Boolean);
+            const toLoad = urls.filter(function (u) { return !loadedCustomDecoderUrls.has(u); });
+            if (toLoad.length === 0) {
+                populateDecoderTesterDropdown();
+                return Promise.resolve();
+            }
+            return Promise.all(toLoad.map(function (url) {
+                return new Promise(function (resolve) {
+                    const s = document.createElement('script');
+                    s.src = url;
+                    s.onload = function () { loadedCustomDecoderUrls.add(url); resolve(); };
+                    s.onerror = function () { resolve(); };
+                    document.body.appendChild(s);
+                });
+            })).then(function () { populateDecoderTesterDropdown(); });
+        }
+
         async function refreshList() {
             tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 16px;">Loading…</td></tr>';
             try {
@@ -614,6 +622,7 @@ ${code}
                 const files = (data && data.files) ? data.files : [];
                 if (!files.length) {
                     tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 16px;">No custom decoders uploaded yet.</td></tr>';
+                    await loadCustomDecodersIfNeeded([]);
                     return;
                 }
 
@@ -632,8 +641,10 @@ ${code}
                     `;
                     tableBody.appendChild(tr);
                 });
+                await loadCustomDecodersIfNeeded(files);
             } catch (e) {
                 tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 16px; color: #b71c1c;">Failed to load list.</td></tr>';
+                populateDecoderTesterDropdown();
             }
         }
 

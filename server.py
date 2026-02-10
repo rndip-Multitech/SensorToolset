@@ -8,17 +8,30 @@ This will serve all of the HTML pages for configuring RadioBridge sensors.
 Importing the required libraries.
 """
 
-from flask import Flask, send_from_directory, send_file, jsonify, request, redirect
-from werkzeug.utils import secure_filename
+try:
+    from flask import Flask, send_from_directory, send_file, jsonify, request, redirect
+    from werkzeug.utils import secure_filename
+except ImportError as e:
+    import sys
+    print("ERROR: Flask or its dependencies are not installed.", file=sys.stderr)
+    print("Install Python dependencies by running (from the app directory):", file=sys.stderr)
+    print("  ./Install postinstall", file=sys.stderr)
+    print("or manually:", file=sys.stderr)
+    print("  python3 -m pip install --user --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt", file=sys.stderr)
+    print("Then run the app again with the same python3.", file=sys.stderr)
+    sys.exit(1)
 import io
 import json
 import logging
 import os
+import threading
+import time
 import argparse
 import urllib.request
 import urllib.error
 import ssl
 import base64
+from datetime import datetime, timezone
 
 from app_paths import get_app_root, get_custom_decoders_dir
 
@@ -54,7 +67,14 @@ def _decoder_file_url(filename: str) -> str:
 
 # Try to import MQTT utilities - gracefully handle if paho-mqtt isn't installed
 try:
-    from mqtt_utils_rbt import connect_to_broker, get_sensors, send_downlink, get_messages
+    from mqtt_utils_rbt import (
+        connect_to_broker,
+        get_sensors,
+        send_downlink,
+        get_messages,
+        get_broker_config,
+        read_persistent_uplink_cache,
+    )
     MQTT_AVAILABLE = True
     logger.info("MQTT utilities loaded successfully")
 except ImportError as e:
@@ -80,6 +100,13 @@ config = {
     'port': 5000,
     'debug': False
 }
+
+def _gateway_base_url(broker):
+    """Gateway HTTP base URL from broker host (no port — uses default HTTP port)."""
+    if not broker or not str(broker).strip():
+        return None
+    host = str(broker).strip().split(":")[0]
+    return "http://" + host
 
 
 def load_config(config_file):
@@ -258,6 +285,21 @@ def get_messages_route():
         return jsonify({"messages": [], "error": "MQTT utilities not available"}), 200
     except Exception as e:
         logger.error(f"Error fetching messages: {e}")
+        return jsonify({"messages": [], "error": str(e)}), 500
+
+
+@app.route('/api/uplinks/persistent-cache', methods=['GET'])
+def get_persistent_uplink_cache_route():
+    """Return messages from the server-side persistent uplink cache (received even when browser was closed)."""
+    try:
+        if not MQTT_AVAILABLE:
+            return jsonify({"messages": []}), 200
+        limit = request.args.get('limit', 5000, type=int)
+        limit = min(max(1, limit), 10000)
+        messages = read_persistent_uplink_cache(limit=limit)
+        return jsonify({"messages": messages}), 200
+    except Exception as e:
+        logger.error(f"Error reading persistent uplink cache: {e}")
         return jsonify({"messages": [], "error": str(e)}), 500
 
 
@@ -494,6 +536,78 @@ def test_integration_unsaved_route():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@app.route('/api/cloud/forward-message', methods=['POST'])
+def forward_message_route():
+    """Accept a decoded message from the uplinks page and queue it for cloud forwarding (decoder from Uplinks page)."""
+    if not CLOUD_INTEGRATIONS_AVAILABLE:
+        return jsonify({"error": "Cloud integrations not available"}), 500
+    data = request.get_json() or {}
+    try:
+        cloud_integrations.forward_message({
+            "topic": data.get("topic", ""),
+            "data": data.get("data", {}),
+            "decoded": data.get("decoded"),
+            "deveui": data.get("deveui"),
+            "time": data.get("time") or datetime.now(timezone.utc).isoformat(),
+        })
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error queueing forward message: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/lora/packets/queue', methods=['GET'])
+def gateway_queue_get():
+    """Proxy GET to gateway api/lora/packets/queue. Query param: broker (gateway host)."""
+    broker = request.args.get("broker", "").strip()
+    base = _gateway_base_url(broker)
+    if not base:
+        return jsonify({"error": "Broker (gateway) required. Connect first or set broker."}), 400
+    url = base.rstrip("/") + "/api/lora/packets/queue"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8")
+            data = json.loads(body) if body.strip() else {}
+        return jsonify(data)
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8")
+            data = json.loads(body) if body.strip() else {}
+        except Exception:
+            data = {"error": str(e)}
+        return jsonify(data), e.code
+    except Exception as e:
+        logger.warning(f"Gateway queue GET failed: {e}")
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route('/api/lora/packets/queue/<path:subpath>', methods=['DELETE'])
+def gateway_queue_delete(subpath):
+    """Proxy DELETE to gateway api/lora/packets/queue/<deveui>/<id>, /<deveui>, or /all. Query param: broker."""
+    broker = request.args.get("broker", "").strip()
+    base = _gateway_base_url(broker)
+    if not base:
+        return jsonify({"error": "Broker (gateway) required."}), 400
+    url = base.rstrip("/") + "/api/lora/packets/queue/" + subpath.lstrip("/")
+    try:
+        req = urllib.request.Request(url, method="DELETE")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8")
+            data = json.loads(body) if body.strip() else {}
+        return jsonify(data)
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8")
+            data = json.loads(body) if body.strip() else {}
+        except Exception:
+            data = {"error": str(e)}
+        return jsonify(data), e.code
+    except Exception as e:
+        logger.warning(f"Gateway queue DELETE failed: {e}")
+        return jsonify({"error": str(e)}), 502
+
+
 @app.route('/send_downlink', methods=['POST'])
 def send_downlink_route():
     """
@@ -622,5 +736,23 @@ if __name__ == '__main__':
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     
+    def auto_connect_mqtt():
+        time.sleep(1.5)
+        try:
+            if MQTT_AVAILABLE:
+                cfg = get_broker_config()
+                if cfg and cfg.get('broker'):
+                    connect_to_broker(
+                        broker=cfg.get('broker', 'localhost'),
+                        port=int(cfg.get('port', 1883)),
+                        topic=cfg.get('topic', 'lora/+/up'),
+                    )
+                    logger.info("Auto-connected to MQTT broker from saved config (uplinks cached when browser is closed)")
+        except Exception as e:
+            logger.warning("Auto-connect to MQTT failed: %s", e)
+
+    t = threading.Thread(target=auto_connect_mqtt, daemon=True)
+    t.start()
+
     logger.info(f"Starting Sensor Toolkit server on {config['host']}:{config['port']}")
     app.run(host=config['host'], port=config['port'], debug=config['debug'])

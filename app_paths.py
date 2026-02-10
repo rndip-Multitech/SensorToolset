@@ -83,3 +83,10 @@ def get_network_dashboard_py_dir() -> str:
     # This is needed for importing radiobridgev3.py (enhanced decoder)
     return os.path.join(get_app_root(), "NetworkDashboard-0.1", "static", "py")
 
+
+def get_uplink_cache_dir() -> str:
+    """Writable directory for persistent uplink cache (JSONL). Used so packets are stored when browser is closed."""
+    p = os.path.join(get_data_root(), "uplink_cache")
+    os.makedirs(p, exist_ok=True)
+    return p
+

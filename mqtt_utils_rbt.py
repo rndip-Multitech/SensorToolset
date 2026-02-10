@@ -13,11 +13,101 @@ See: https://www.multitech.net/developer/software/lora/lora-network-server/mqtt-
 
 import base64
 import json
-from typing import Any, Dict, List
+import threading
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
+
+# Persistent uplink cache (JSONL) and broker config
+try:
+    from app_paths import get_uplink_cache_dir, get_config_dir
+    _UPLINK_CACHE_DIR = get_uplink_cache_dir()
+    _CONFIG_DIR = get_config_dir()
+except Exception:
+    _UPLINK_CACHE_DIR = None
+    _CONFIG_DIR = None
+
+_UPLINK_CACHE_FILE = "uplinks.jsonl"
+_UPLINK_CACHE_MAX_READ = 5000
+_cache_write_lock = threading.Lock()
+_BROKER_CONFIG_FILE = "last_broker.json"
+
+
+def _append_to_persistent_cache(msg: Dict[str, Any]) -> None:
+    """Append one message to the persistent uplink cache (JSONL). Thread-safe."""
+    if not _UPLINK_CACHE_DIR:
+        return
+    import os
+    with _cache_write_lock:
+        try:
+            path = os.path.join(_UPLINK_CACHE_DIR, _UPLINK_CACHE_FILE)
+            with open(path, "a", encoding="utf-8") as f:
+                # Ensure time field for browser
+                out = dict(msg)
+                if "time" not in out and isinstance(out.get("data"), dict):
+                    out["time"] = out["data"].get("current_time") or datetime.now(timezone.utc).isoformat()
+                f.write(json.dumps(out, ensure_ascii=False) + "\n")
+        except Exception as e:  # noqa: BLE001
+            print(f"Uplink cache write error: {e}")
+
+
+def read_persistent_uplink_cache(limit: int = _UPLINK_CACHE_MAX_READ) -> List[Dict[str, Any]]:
+    """Read the last `limit` messages from the persistent cache (newest first in list)."""
+    if not _UPLINK_CACHE_DIR:
+        return []
+    import os
+    path = os.path.join(_UPLINK_CACHE_DIR, _UPLINK_CACHE_FILE)
+    if not os.path.isfile(path):
+        return []
+    with _cache_write_lock:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except Exception:  # noqa: BLE001
+            return []
+    # Last N lines, then reverse so oldest-first for API consistency with in-memory buffer
+    lines = lines[-limit:] if len(lines) > limit else lines
+    messages = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            messages.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return messages
+
+
+def save_broker_config(broker: str, port: int, topic: str) -> None:
+    """Save broker/port/topic so server can auto-connect on startup."""
+    if not _CONFIG_DIR:
+        return
+    try:
+        import os
+        path = os.path.join(_CONFIG_DIR, _BROKER_CONFIG_FILE)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"broker": broker, "port": port, "topic": topic}, f)
+    except Exception as e:  # noqa: BLE001
+        print(f"Could not save broker config: {e}")
+
+
+def get_broker_config() -> Optional[Dict[str, Any]]:
+    """Return saved broker config for auto-connect, or None."""
+    if not _CONFIG_DIR:
+        return None
+    try:
+        import os
+        path = os.path.join(_CONFIG_DIR, _BROKER_CONFIG_FILE)
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
 
 # Try to import cloud integrations module
 try:
@@ -75,8 +165,8 @@ message_buffer: List[Dict[str, Any]] = []
 sensor_list: List[Dict[str, str]] = []
 
 # Single global client; we run it in loop_start() mode
-mqtt_client: mqtt.Client | None = None
-current_broker_ip: str | None = None
+mqtt_client: Optional[mqtt.Client] = None
+current_broker_ip: Optional[str] = None
 
 
 def decode_temp_humidity_sensor(payload: bytes) -> Dict[str, Any]:
@@ -297,31 +387,22 @@ def _on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
             data['current_time'] = datetime.now().astimezone().isoformat()
         
         message_buffer.append({"type": "json", "topic": topic, "data": data})
+        _append_to_persistent_cache({"type": "json", "topic": topic, "data": data})
     except json.JSONDecodeError:
         message_buffer.append({"type": "text", "topic": topic, "data": message})
+        _append_to_persistent_cache({"type": "text", "topic": topic, "data": message})
     except Exception as e:  # noqa: BLE001
         print(f"Error processing MQTT message: {e}")
         message_buffer.append(
             {"type": "error", "topic": topic, "data": f"Error processing message: {e}"}
         )
+        _append_to_persistent_cache({"type": "error", "topic": topic, "data": str(e)})
 
     if len(message_buffer) > 150:
         message_buffer.pop(0)
 
-    # Forward to cloud integrations (async, non-blocking)
-    if CLOUD_INTEGRATIONS_AVAILABLE and message_buffer:
-        try:
-            last_msg = message_buffer[-1]
-            if last_msg.get("type") == "json":
-                cloud_integrations.forward_message({
-                    "topic": last_msg.get("topic", ""),
-                    "data": last_msg.get("data", {}),
-                    "decoded": last_msg.get("data", {}).get("data_decoded"),
-                    "deveui": last_msg.get("data", {}).get("deveui") if isinstance(last_msg.get("data"), dict) else None,
-                    "time": datetime.now(timezone.utc).isoformat(),
-                })
-        except Exception as fwd_err:
-            print(f"Cloud integration forward error: {fwd_err}")
+    # Cloud forwarding uses the decoder from the Uplinks page only (uplinks page POSTs to /api/cloud/forward-message).
+    # No server-side forward here so the user's decoder choice on Uplinks is always used.
 
 
 def connect_to_broker(broker: str = "localhost", port: int = 1883, topic: str = "lora/+/up") -> None:
@@ -334,6 +415,7 @@ def connect_to_broker(broker: str = "localhost", port: int = 1883, topic: str = 
     global mqtt_client, current_broker_ip
 
     current_broker_ip = broker
+    save_broker_config(broker, int(port), topic)
 
     if mqtt_client is None:
         client = mqtt.Client()
@@ -359,7 +441,7 @@ def get_messages() -> List[Dict[str, Any]]:
     return message_buffer
 
 
-def send_downlink(data: Dict[str, Any], broker_ip: str | None = None) -> Dict[str, Any]:
+def send_downlink(data: Dict[str, Any], broker_ip: Optional[str] = None) -> Dict[str, Any]:
     """
     Construct and publish a downlink packet for supported sensor types.
 

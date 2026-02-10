@@ -291,10 +291,7 @@
 
     <section>
         <div class="container">
-            <h2 class="section-title">Cloud Integrations</h2>
-            <p style="margin-top: 8px; color: #666;">
-                Forward decoded and raw uplink data to external cloud services via MQTT, HTTP webhooks, UDP, or TCP.
-            </p>
+            <h2 class="section-title">Cloud Integrations <button type="button" class="help-button" onclick="alert('Forward decoded and raw uplink data to external cloud services.\n\n• HTTP Webhook – POST JSON to any URL (Bearer, Basic, or API key auth)\n• MQTT – Publish to an external broker (TLS and certs supported)\n• UDP – Send JSON datagrams\n• TCP – Send JSON over TCP (TLS supported)\n\nEach integration can filter by DevEUI or event type, and send raw payload, decoded data, or both.')" title="Help">?</button></h2>
 
             <div id="statusMsg" class="status-msg"></div>
 
@@ -313,18 +310,6 @@
                 </div>
             </div>
 
-            <div class="panel">
-                <h3>How It Works</h3>
-                <ul style="line-height: 1.8; color: #444;">
-                    <li><strong>HTTP Webhook</strong> – POST JSON payloads to any URL (supports Bearer, Basic, or API key auth)</li>
-                    <li><strong>MQTT</strong> – Publish to an external MQTT broker (supports TLS and authentication)</li>
-                    <li><strong>UDP</strong> – Send JSON datagrams to a UDP endpoint (lightweight, no connection overhead)</li>
-                    <li><strong>TCP</strong> – Send JSON over a persistent TCP connection (supports TLS)</li>
-                </ul>
-                <p class="hint">
-                    Each integration can filter by DevEUI or event type, and you can choose to send raw payload, decoded data, or both.
-                </p>
-            </div>
         </div>
     </section>
 
@@ -431,9 +416,8 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="mqttTopic">Topic</label>
+                        <label for="mqttTopic">Topic <button type="button" class="help-button" onclick="alert('Use {deveui} as placeholder, e.g. sensor/{deveui}/uplink')" title="Help">?</button></label>
                         <input type="text" id="mqttTopic" placeholder="sensor/uplinks" value="sensor/uplinks">
-                        <div class="hint">Use {deveui} as placeholder, e.g. sensor/{deveui}/uplink</div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -465,8 +449,7 @@
                     </div>
                     <div class="form-group" style="margin-top: 12px;">
                         <details>
-                            <summary style="cursor: pointer; font-weight: bold;">Certificates (optional)</summary>
-                            <p class="hint" style="margin: 8px 0;">Paste PEM content for TLS. Leave empty to use system CA or skip verify.</p>
+                            <summary style="cursor: pointer; font-weight: bold;">Certificates (optional) <button type="button" class="help-button" onclick="event.preventDefault(); event.stopPropagation(); alert('Paste PEM content for TLS. Leave empty to use system CA or skip verify. CA cert verifies the broker; client cert + key enable mutual TLS.');" title="Help">?</button></summary>
                             <div class="form-group">
                                 <label for="mqttCaCert">CA certificate (PEM)</label>
                                 <textarea id="mqttCaCert" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style="width:100%; max-width:500px; padding:8px; border:1px solid #ddd; border-radius:4px; font-family:monospace; font-size:12px;"></textarea>

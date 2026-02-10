@@ -353,7 +353,12 @@
                         Decoded = human-readable fields. Raw = payload hex/base64 + metadata.
                     </span>
                 </div>
-                
+                <div class="form-group" style="margin-top: 8px;">
+                    <span style="font-weight: bold;">Temperature:</span>
+                    <label style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; cursor: pointer;"><input type="radio" name="tempUnitUplinks" value="C"> °C</label>
+                    <label style="display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; cursor: pointer;"><input type="radio" name="tempUnitUplinks" value="F"> °F</label>
+                    <span style="color:#666; font-size: 12px; margin-left: 8px;">Applies to decoded view and CSV/JSON export.</span>
+                </div>
                 <div class="form-group" style="margin-top: 12px;">
                     <label for="defaultDecoder">Default decoder:</label>
                     <select id="defaultDecoder" class="decoder-select"></select>
@@ -411,6 +416,58 @@
         const DECODER_MAP_KEY = 'rbt_decoder_map_by_deveui';
         const DEFAULT_DECODER_KEY = 'rbt_default_decoder_id';
         const VIEW_MODE_KEY = 'rbt_uplinks_view_mode';
+        const TEMP_UNIT_KEY = 'sensorTempUnit';
+
+        function getTempUnit() {
+            try {
+                const u = localStorage.getItem(TEMP_UNIT_KEY);
+                return (u === 'F' || u === 'C') ? u : 'C';
+            } catch (e) { return 'C'; }
+        }
+        function setTempUnit(unit) {
+            try {
+                localStorage.setItem(TEMP_UNIT_KEY, unit);
+            } catch (e) {}
+        }
+        function isTempKey(key) {
+            if (!key || typeof key !== 'string') return false;
+            const k = key.toLowerCase();
+            if (k.includes('fahrenheit')) return false;
+            return k.includes('temp') || k.includes('temperature') || k === 'value';
+        }
+        function applyTempUnitToDecoded(decoded) {
+            if (getTempUnit() !== 'F' || !decoded) return decoded;
+            return deepConvertTempsToF(decoded, '');
+        }
+        function deepConvertTempsToF(obj, parentKey) {
+            if (obj === null) return null;
+            if (typeof obj !== 'object') return obj;
+            const parentLower = (parentKey || '').toLowerCase();
+            const inTempContext = parentLower.includes('temp') || parentLower.includes('temperature');
+            if (Array.isArray(obj)) {
+                return obj.map(function (item) { return deepConvertTempsToF(item, parentKey); });
+            }
+            const out = {};
+            for (const k in obj) {
+                if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+                const v = obj[k];
+                const kLower = k.toLowerCase();
+                if (k === 'unit' && inTempContext && typeof v === 'string' && (v === 'C' || v === '\u00B0C' || v === '°C')) {
+                    out[k] = '\u00B0F';
+                    continue;
+                }
+                if (typeof v === 'number' && (inTempContext && kLower === 'value' || isTempKey(k) && kLower !== 'value')) {
+                    out[k] = Math.round((v * 9 / 5 + 32) * 100) / 100;
+                    continue;
+                }
+                if (typeof v === 'object' && v !== null) {
+                    out[k] = deepConvertTempsToF(v, k);
+                    continue;
+                }
+                out[k] = v;
+            }
+            return out;
+        }
         let customDecodersLoaded = false;
         let lastCustomDecoderLoadReport = null;
         
@@ -419,6 +476,8 @@
         const DB_NAME = 'RBTUplinksDB';
         const DB_VERSION = 2; // Incremented to handle fingerprint index upgrade
         const STORE_NAME = 'messages';
+        const MAX_FORWARDED_FINGERPRINTS = 500;
+        let forwardedFingerprints = new Set();
         
         // Initialize IndexedDB
         function initDB() {
@@ -811,12 +870,13 @@
                 let csv = headers.join(',') + '\n';
                 
                 messages.forEach(msg => {
+                    const decodedExport = applyTempUnitToDecoded(msg.decoded || {});
                     const row = [
                         `"${msg.time || ''}"`,
                         `"${msg.deveui || ''}"`,
                         `"${msg.topic || ''}"`,
                         `"${msg.eventType || ''}"`,
-                        `"${JSON.stringify(msg.decoded || {}).replace(/"/g, '""')}"`
+                        `"${JSON.stringify(decodedExport).replace(/"/g, '""')}"`
                     ];
                     csv += row.join(',') + '\n';
                 });
@@ -849,7 +909,7 @@
                     deveui: msg.deveui,
                     topic: msg.topic,
                     eventType: msg.eventType,
-                    decoded: msg.decoded,
+                    decoded: applyTempUnitToDecoded(msg.decoded),
                     original: msg.original
                 })), null, 2);
                 
@@ -1038,6 +1098,7 @@
         function renderMessageDataCell(messageDataCell, originalMessage, decodedResult) {
             const viewMode = getViewMode();
             const decoded = decodedResult && decodedResult.decoded ? decodedResult.decoded : {};
+            const decodedForDisplay = applyTempUnitToDecoded(decoded);
             const rawInfo = extractRawInfo(originalMessage);
 
             messageDataCell.innerHTML = '';
@@ -1057,11 +1118,11 @@
             }
 
             if (viewMode === 'decoded') {
-                addBox('decoded', 'Decoded', decoded);
+                addBox('decoded', 'Decoded', decodedForDisplay);
             } else if (viewMode === 'raw') {
                 addBox('raw', 'Raw payload', rawInfo);
             } else {
-                addBox('decoded', 'Decoded', decoded);
+                addBox('decoded', 'Decoded', decodedForDisplay);
                 addBox('raw', 'Raw payload', rawInfo);
             }
         }
@@ -1276,6 +1337,30 @@
                         console.warn('[Cache] Error removing duplicates on init:', e);
                     }
                 }
+
+                // Backfill from server persistent cache (packets received while browser was closed)
+                try {
+                    const res = await fetch('/api/uplinks/persistent-cache?limit=5000');
+                    const data = await res.json().catch(function () { return { messages: [] }; });
+                    if (data.messages && data.messages.length > 0) {
+                        let merged = 0;
+                        for (let i = 0; i < data.messages.length; i++) {
+                            const m = data.messages[i];
+                            const original = { type: m.type, topic: m.topic, data: m.data || m };
+                            try {
+                                await cacheMessage(original);
+                                merged++;
+                            } catch (e) { /* dedupe or error */ }
+                        }
+                        if (merged > 0) {
+                            console.log('[Cache] Merged ' + merged + ' messages from server persistent cache');
+                            await updateCacheStats();
+                            refreshDevEuiDropdown(true);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Cache] Could not backfill from persistent cache:', e);
+                }
                 
                 await updateCacheStats();
                 // Load cached messages on page load
@@ -1309,6 +1394,17 @@
             // Set up download buttons
             document.getElementById('downloadCSVBtn').addEventListener('click', downloadCSV);
             document.getElementById('downloadJSONBtn').addEventListener('click', downloadJSON);
+
+            var tempUnitRadios = document.querySelectorAll('input[name="tempUnitUplinks"]');
+            var currentTempUnit = getTempUnit();
+            tempUnitRadios.forEach(function (r) {
+                if (r.value === currentTempUnit) r.checked = true;
+                r.addEventListener('change', function () {
+                    if (!this.checked) return;
+                    setTempUnit(this.value);
+                    applyFilters();
+                });
+            });
 
             // Import history: button opens file picker; on file chosen, import and refresh
             const uploadHistoryBtn = document.getElementById('uploadHistoryBtn');
@@ -1485,6 +1581,36 @@
                                 filters.search = filter || filters.search;
                                 displayCachedMessages(filters);
                             });
+                            // Always forward each new message with current Uplinks decoder to cloud integrations
+                            (function () {
+                                const defaultDecoderId = getDefaultDecoderId();
+                                const decoderMap = loadDecoderMap();
+                                data.messages.forEach(function (message) {
+                                    const fp = getMessageFingerprint(message);
+                                    if (forwardedFingerprints.has(fp)) return;
+                                    const deveui = getDevEuiFromMessage(message);
+                                    const selectedDecoderId = (deveui && decoderMap[deveui]) ? decoderMap[deveui] : defaultDecoderId;
+                                    const decodedResult = decodeMessageWithSelection(message, selectedDecoderId);
+                                    const payload = {
+                                        topic: message.topic || '',
+                                        data: message.data || {},
+                                        decoded: applyTempUnitToDecoded(decodedResult && decodedResult.decoded),
+                                        deveui: deveui || null,
+                                        time: (message.data && (message.data.current_time || message.data.time)) || new Date().toISOString()
+                                    };
+                                    fetch('/api/cloud/forward-message', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(payload)
+                                    }).then(function () {
+                                        forwardedFingerprints.add(fp);
+                                        if (forwardedFingerprints.size > MAX_FORWARDED_FINGERPRINTS) {
+                                            const arr = Array.from(forwardedFingerprints);
+                                            forwardedFingerprints = new Set(arr.slice(-MAX_FORWARDED_FINGERPRINTS));
+                                        }
+                                    }).catch(function () {});
+                                });
+                            })();
                         } else {
                             // No new messages from server, but show cached ones
                             const filters = getActiveFilters();

@@ -58,8 +58,7 @@
 
     <section>
         <div class="container">
-            <h2 class="section-title">Send Downlinks</h2>
-            <p style="margin-top: 8px; color: #666;">Build downlinks from a RadioBridge or third-party encoder, or send a raw hex/base64 payload with port.</p>
+            <h2 class="section-title">Send Downlinks <button type="button" class="help-button" onclick="alert('Build downlinks from a RadioBridge or third-party encoder, or send a raw hex/base64 payload with port. Connect to your gateway broker to load devices and send.')" title="Help">?</button></h2>
 
             <div class="panel">
                 <h3>Connection</h3>
@@ -85,25 +84,23 @@
             </div>
 
             <div class="panel">
-                <h3>Device</h3>
+                <h3>Device <button type="button" class="help-button" onclick="alert('Devices are loaded from active sessions on the gateway\'s LoRa Network Server. Connect first to load the list.')" title="Help">?</button></h3>
                 <div class="form-group">
                     <label for="deviceSelect">Device (DevEUI):</label>
                     <select id="deviceSelect">
                         <option value="">-- Connect to load devices --</option>
                     </select>
                 </div>
-                <p style="font-size: 12px; color: #666;">Devices are loaded from active sessions on the gateway's LoRa Network Server.</p>
             </div>
 
             <div class="panel">
-                <h3>Downlink mode</h3>
+                <h3>Downlink mode <button type="button" class="help-button" onclick="alert('Build from encoder: use a codec (RadioBridge or third-party) to build a downlink from parameters.\n\nRaw hex/base64: send a raw payload as hex or base64 and specify the port. Enter either hex or base64; the other is ignored if both are set (hex takes precedence).')" title="Help">?</button></h3>
                 <div class="mode-tabs">
                     <button type="button" id="tabEncoder" class="active">Build from encoder</button>
                     <button type="button" id="tabRaw">Raw hex / base64</button>
                 </div>
 
                 <div id="panelEncoder" class="mode-panel active">
-                    <p style="margin-bottom: 12px; color: #666;">Use a codec encoder (RadioBridge or third-party) to build a downlink from parameters.</p>
                     <div class="form-group">
                         <label for="codecSelect">Codec:</label>
                         <select id="codecSelect"><option value="">-- No codecs with encoders available --</option></select>
@@ -126,7 +123,6 @@
                 </div>
 
                 <div id="panelRaw" class="mode-panel">
-                    <p style="margin-bottom: 12px; color: #666;">Send a raw payload as hex or base64 and specify the port.</p>
                     <div class="form-group">
                         <label for="rawPort">Port (fPort):</label>
                         <input type="number" id="rawPort" name="rawPort" value="1" min="1" max="223">
@@ -137,9 +133,8 @@
                     </div>
                     <div class="form-group" style="align-items: flex-start;">
                         <label for="rawBase64">Payload (base64):</label>
-                        <textarea id="rawBase64" class="raw-payload" placeholder="e.g. /wABAg== (leave empty if using hex)"></textarea>
+                        <textarea id="rawBase64" class="raw-payload" placeholder="e.g. /wABAg=="></textarea>
                     </div>
-                    <p style="font-size: 12px; color: #666;">Enter either hex or base64; the other is ignored if both are set (hex takes precedence).</p>
                     <button type="button" class="action-button" id="sendRawBtn">Send Raw Downlink</button>
                 </div>
             </div>
@@ -148,12 +143,12 @@
 
             <div class="panel">
                 <div style="display:flex; justify-content: space-between; align-items:center; gap: 10px; flex-wrap: wrap;">
-                    <h3 style="margin:0;">Downlink history</h3>
-                    <button type="button" class="action-button" id="refreshHistoryBtn">Refresh</button>
+                    <h3 style="margin:0;">Downlink queue <button type="button" class="help-button" onclick="alert('Shows the gateway downlink queue. Data comes from the gateway API (api/lora/packets/queue). Use the broker host as the gateway; connect first then click Refresh. You can delete a single packet, all packets for one device, or all queued downlinks.')" title="Help">?</button></h3>
+                    <div style="display:flex; gap: 8px;">
+                        <button type="button" class="action-button" id="refreshHistoryBtn">Refresh</button>
+                        <button type="button" class="action-button secondary" id="deleteAllQueueBtn" title="Delete all queued downlinks">Delete all queued</button>
+                    </div>
                 </div>
-                <p style="margin-top: 8px; color: #666; font-size: 12px;">
-                    Shows recent downlink attempts (sent/failed) recorded on the server.
-                </p>
                 <div style="overflow-x:auto;">
                     <table class="history">
                         <thead>
@@ -161,12 +156,12 @@
                                 <th>Time</th>
                                 <th>DevEUI</th>
                                 <th>Port</th>
-                                <th>Status</th>
                                 <th>Details</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="historyBody">
-                            <tr><td colspan="5" style="text-align:center; padding: 14px; color:#666;">No history loaded.</td></tr>
+                            <tr><td colspan="5" style="text-align:center; padding: 14px; color:#666;">No queue loaded. Enter broker and click Refresh.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -216,6 +211,93 @@
         }
         function clearStatus() {
             document.getElementById('status').style.display = 'none';
+        }
+
+        function getBrokerForQueue() {
+            return (brokerIp || document.getElementById('broker').value || '').trim();
+        }
+
+        async function loadHistory() {
+            const tbody = document.getElementById('historyBody');
+            if (!tbody) return;
+            const broker = getBrokerForQueue();
+            if (!broker) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 14px; color:#666;">Enter broker (gateway) and click Refresh.</td></tr>';
+                return;
+            }
+            try {
+                const res = await fetch('/api/lora/packets/queue?broker=' + encodeURIComponent(broker));
+                const data = await res.json().catch(() => ({}));
+                let list = Array.isArray(data) ? data : (data.packets || data.queue || data.history || []);
+                if (!Array.isArray(list)) list = [];
+                if (list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 14px; color:#666;">No queued downlinks.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = list.map(function (row) {
+                    const id = row.id || row.ID || row.packetId || '';
+                    const deveui = row.deveui || row.DevEUI || row.dev_eui || '';
+                    const deveuiNoDashes = String(deveui).replace(/-/g, '');
+                    const timeStr = (row.time || row.created || row.timestamp || row.Time) ? new Date(row.time || row.created || row.timestamp || row.Time).toLocaleString() : '';
+                    const port = row.port ?? row.fPort ?? row.port_fport ?? '';
+                    const details = row.details || row.data || row.payload || row.message || '';
+                    let actions = '';
+                    if (id && deveuiNoDashes) {
+                        actions += '<button type="button" class="action-button secondary delete-one-btn" data-deveui="' + deveuiNoDashes.replace(/"/g, '&quot;') + '" data-id="' + String(id).replace(/"/g, '&quot;') + '" title="Delete this packet">Delete</button> ';
+                    }
+                    if (deveuiNoDashes) {
+                        actions += '<button type="button" class="action-button secondary delete-device-btn" data-deveui="' + deveuiNoDashes.replace(/"/g, '&quot;') + '" title="Delete all for this device">Delete all for device</button>';
+                    }
+                    return '<tr><td>' + timeStr + '</td><td>' + (deveui || '') + '</td><td>' + port + '</td><td>' + (details || '') + '</td><td>' + actions + '</td></tr>';
+                }).join('');
+                tbody.querySelectorAll('.delete-one-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        deleteQueueOne(btn.getAttribute('data-deveui'), btn.getAttribute('data-id'));
+                    });
+                });
+                tbody.querySelectorAll('.delete-device-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        deleteQueueAllForDevice(btn.getAttribute('data-deveui'));
+                    });
+                });
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 14px; color:#b71c1c;">Failed to load queue: ' + (e.message || e) + '</td></tr>';
+            }
+        }
+
+        async function deleteQueueOne(deveui, id) {
+            const broker = getBrokerForQueue();
+            if (!broker) { showStatus('err', 'Broker required.'); return; }
+            try {
+                const res = await fetch('/api/lora/packets/queue/' + encodeURIComponent(deveui) + '/' + encodeURIComponent(id) + '?broker=' + encodeURIComponent(broker), { method: 'DELETE' });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) { showStatus('ok', 'Packet deleted.'); loadHistory(); }
+                else { showStatus('err', data.error || data.message || 'Delete failed'); }
+            } catch (e) { showStatus('err', 'Error: ' + e); }
+        }
+
+        async function deleteQueueAllForDevice(deveui) {
+            const broker = getBrokerForQueue();
+            if (!broker) { showStatus('err', 'Broker required.'); return; }
+            if (!confirm('Delete all queued downlinks for this device?')) return;
+            try {
+                const res = await fetch('/api/lora/packets/queue/' + encodeURIComponent(deveui) + '?broker=' + encodeURIComponent(broker), { method: 'DELETE' });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) { showStatus('ok', 'Queued downlinks for device deleted.'); loadHistory(); }
+                else { showStatus('err', data.error || data.message || 'Delete failed'); }
+            } catch (e) { showStatus('err', 'Error: ' + e); }
+        }
+
+        async function deleteQueueAll() {
+            const broker = getBrokerForQueue();
+            if (!broker) { showStatus('err', 'Broker required.'); return; }
+            if (!confirm('Delete all queued downlinks for all devices?')) return;
+            try {
+                const res = await fetch('/api/lora/packets/queue/all?broker=' + encodeURIComponent(broker), { method: 'DELETE' });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) { showStatus('ok', 'All queued downlinks deleted.'); loadHistory(); }
+                else { showStatus('err', data.error || data.message || 'Delete failed'); }
+            } catch (e) { showStatus('err', 'Error: ' + e); }
         }
 
         function connectToBroker(e) {
@@ -457,10 +539,17 @@
             try {
                 const res = await fetch('/send_downlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, data: base64, port, broker: brokerIp || undefined }) });
                 const data = await res.json().catch(() => ({}));
-                if (data.error) showStatus('err', data.error);
-                else showStatus('ok', 'Raw downlink sent to ' + devEui + ' on port ' + port);
+                if (data.error) {
+                    showStatus('err', data.error);
+                } else {
+                    showStatus('ok', 'Raw downlink sent to ' + devEui + ' on port ' + port);
+                    document.getElementById('rawHex').value = '';
+                    document.getElementById('rawBase64').value = '';
+                }
+                loadHistory();
             } catch (e) {
                 showStatus('err', 'Error: ' + e);
+                loadHistory();
             }
         }
 
@@ -469,8 +558,11 @@
         document.getElementById('encoderSelect').addEventListener('change', renderEncoderParams);
         document.getElementById('sendEncoderBtn').addEventListener('click', sendEncoderDownlink);
         document.getElementById('sendRawBtn').addEventListener('click', sendRawDownlink);
+        document.getElementById('refreshHistoryBtn').addEventListener('click', loadHistory);
+        document.getElementById('deleteAllQueueBtn').addEventListener('click', deleteQueueAll);
         document.addEventListener('input', e => { if (e.target.id && e.target.id.startsWith('param_')) updatePreview(); });
 
+        loadHistory();
         loadCustomDecodersOnce().then(() => {
             populateCodecs();
         });
