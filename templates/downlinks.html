@@ -47,11 +47,11 @@
             <ul>
                 <li class="item"><img src="/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home"><a href="index.html">Home</a></li>
                 <li class="item"><img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks"><a href="uplinks.html">Uplinks</a></li>
-                <li class="item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;"><path d="M3 3v18h18"></path><path d="M7 16l4-4 4 4 6-6"></path></svg><a href="sensors.html">Sensors</a></li>
                 <li class="item active"><img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks"><a href="downlinks.html">Send Downlinks</a></li>
+                <li class="item"><img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge"><a href="radiobridge.html">RadioBridge Config</a></li>
+                <li class="item"><img src="/static/icons/bar-chart.svg" width="24" height="24" class="icon-margin" alt="Sensor Monitor"><a href="sensors.html">Sensor Monitor</a></li>
                 <li class="item"><img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders"><a href="decoders.html">Decoders</a></li>
                 <li class="item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg><a href="cloud_integrations.html">Cloud Integrations</a></li>
-                <li class="item"><img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge"><a href="radiobridge.html">RadioBridge Config</a></li>
             </ul>
         </div>
         <div class="nav-profile">
@@ -61,7 +61,10 @@
 
     <section>
         <div class="container">
-            <h2 class="section-title">Send Downlinks <button type="button" class="help-button" onclick="alert('Build downlinks from a RadioBridge or third-party encoder, or send a raw hex/base64 payload with port. Connect to your gateway broker to load devices and send.')" title="Help">?</button></h2>
+            <h2 class="section-title">Send Downlinks</h2>
+            <p style="margin: 6px 0 14px; color: #666; font-size: 13px;">
+                Connect to your broker, select a device, then send either an encoder-built payload or a raw hex/base64 payload.
+            </p>
 
             <div class="panel">
                 <h3>Connection</h3>
@@ -87,7 +90,10 @@
             </div>
 
             <div class="panel">
-                <h3>Device <button type="button" class="help-button" onclick="alert('Devices are loaded from active sessions on the gateway\'s LoRa Network Server. Connect first to load the list.')" title="Help">?</button></h3>
+                <h3>Device</h3>
+                <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
+                    Device list is loaded from active network sessions after you connect.
+                </p>
                 <div class="form-group">
                     <label for="deviceSelect">Device (DevEUI):</label>
                     <select id="deviceSelect">
@@ -288,11 +294,42 @@
             if (!codecId) return;
             const codec = window.RBTDecoders.getDecoder(codecId);
             if (!codec || !codec.encoders) return;
+            const isRadioBridge = codecId === 'radiobridge_js';
+            if (!isRadioBridge) {
+                codec.encoders.forEach(enc => {
+                    const o = document.createElement('option');
+                    o.value = enc.id;
+                    o.textContent = enc.name;
+                    encoderSelect.appendChild(o);
+                });
+                return;
+            }
+
+            const groups = {
+                general: { label: 'General', items: [] },
+                advanced: { label: 'Advanced', items: [] },
+                sensor: { label: 'Sensor-specific', items: [] },
+                other: { label: 'Other', items: [] }
+            };
+
             codec.encoders.forEach(enc => {
-                const o = document.createElement('option');
-                o.value = enc.id;
-                o.textContent = enc.name;
-                encoderSelect.appendChild(o);
+                if (enc.id === 'rb_general_config') groups.general.items.push(enc);
+                else if (enc.id === 'rb_advanced_config') groups.advanced.items.push(enc);
+                else if ((enc.id || '').startsWith('rb_')) groups.sensor.items.push(enc);
+                else groups.other.items.push(enc);
+            });
+
+            Object.values(groups).forEach(group => {
+                if (!group.items.length) return;
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = group.label;
+                group.items.forEach(enc => {
+                    const o = document.createElement('option');
+                    o.value = enc.id;
+                    o.textContent = enc.name;
+                    optgroup.appendChild(o);
+                });
+                encoderSelect.appendChild(optgroup);
             });
         }
 
@@ -457,6 +494,7 @@
         (function applyHexcodeFromUrl() {
             const params = new URLSearchParams(window.location.search);
             const hexcode = params.get('hexcode');
+            const sensorType = (params.get('sensorType') || '').trim();
             if (!hexcode || !hexcode.trim()) return;
             const normalized = hexcode.trim().replace(/\s/g, '').replace(/^0x/i, '');
             if (!/^[0-9a-fA-F]*$/.test(normalized)) return;
@@ -468,7 +506,8 @@
                 rawHexEl.focus();
             }
             if (rawBase64El) rawBase64El.value = '';
-            showStatus('ok', 'Hex from RadioBridge config loaded. Select a device above, then click "Send Raw Downlink" to send.');
+            const typeMsg = sensorType ? ` for ${sensorType}` : '';
+            showStatus('ok', `Hex from RadioBridge config loaded${typeMsg}. Select a device above, then click "Send Raw Downlink" to send.`);
             document.getElementById('panelRaw').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
         })();

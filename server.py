@@ -51,12 +51,14 @@ STATIC_DIR = os.path.join(APP_ROOT, "static")
 Creating the Flask app and setting the template and static directories.
 """
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
-# Trust X-Forwarded-Proto/For when behind a reverse proxy (nginx, etc.) so HTTPS works
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+# Trust X-Forwarded-Proto/For when behind a reverse proxy (set TRUST_PROXY=1 when using nginx etc.)
+if os.environ.get("TRUST_PROXY", "").strip() in ("1", "true", "yes"):
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 # Secret key for session management (can be overridden via env)
 app.secret_key = os.environ.get("SENSOR_TOOLKIT_SECRET", "sensor-toolkit-change-me")
 # Allow session cookie on both HTTP and HTTPS (don't require Secure flag)
 app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # Custom decoder storage (served as static files)
 CUSTOM_DECODER_DIR = get_custom_decoders_dir()
@@ -221,8 +223,8 @@ def login():
             data = request.form
         username = (data.get('username') or '').strip()
         password = data.get('password') or ''
-        # IP from client, or fall back to host part of request
-        ip = data.get('ip') or request.host.split(':', 1)[0]
+        # Gateway IP from client input, otherwise host currently serving this app
+        ip = ((data.get('ip') or request.host.split(':', 1)[0]) or '').strip()
         ok, err = authenticate_user(username, password, ip)
         if ok:
             session['username'] = username or 'user'
@@ -941,17 +943,21 @@ if __name__ == '__main__':
     t = threading.Thread(target=auto_connect_mqtt, daemon=True)
     t.start()
 
-    # Write status.json with local IP at server start
+    # Write status.json with pid and AppInfo (LAN IP in AppInfo) at server start
     def write_status_json():
-        lan_ip = None
+        urls = [f"http://127.0.0.1:{config['port']}"]
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             lan_ip = s.getsockname()[0]
             s.close()
+            urls.append(f"http://{lan_ip}:{config['port']}")
         except Exception:
             pass
-        status = {"lan_ip": lan_ip}
+        status = {
+            "pid": os.getpid(),
+            "AppInfo": "Listening at: " + ", ".join(urls),
+        }
         status_path = os.path.join(APP_ROOT, "status.json")
         try:
             with open(status_path, "w", encoding="utf-8") as f:

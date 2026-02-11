@@ -193,14 +193,14 @@
         .status-light.off {
             background: radial-gradient(circle, #757575 0%, #424242 100%);
         }
-        /* Alarm-specific states: active alarms are red, cleared alarms are green */
+        /* Alarm-specific states: active alarms are red, neutral/cleared are grey */
         .status-light.alarm-on {
             background: radial-gradient(circle, #f44336 0%, #b71c1c 100%);
             box-shadow: 0 0 30px rgba(244, 67, 54, 0.7), inset 0 0 10px rgba(255,255,255,0.3);
         }
         .status-light.alarm-off {
-            background: radial-gradient(circle, #4caf50 0%, #2e7d32 100%);
-            box-shadow: 0 0 24px rgba(76, 175, 80, 0.5), inset 0 0 10px rgba(255,255,255,0.25);
+            background: radial-gradient(circle, #757575 0%, #424242 100%);
+            box-shadow: 0 0 10px rgba(0,0,0,0.2), inset 0 0 6px rgba(255,255,255,0.15);
         }
         .status-light.open {
             background: radial-gradient(circle, #ff9800 0%, #f57c00 100%);
@@ -627,16 +627,17 @@
                     <img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
                     <a href="uplinks.html">Uplinks</a>
                 </li>
-                <li class="item active">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
-                        <path d="M3 3v18h18"></path>
-                        <path d="M7 16l4-4 4 4 6-6"></path>
-                    </svg>
-                    <a href="sensors.html">Sensors</a>
-                </li>
                 <li class="item">
                     <img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
                     <a href="downlinks.html">Send Downlinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
+                    <a href="radiobridge.html">RadioBridge Config</a>
+                </li>
+                <li class="item active">
+                    <img src="/static/icons/bar-chart.svg" width="24" height="24" class="icon-margin" alt="Sensor Monitor">
+                    <a href="sensors.html">Sensor Monitor</a>
                 </li>
                 <li class="item">
                     <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
@@ -648,10 +649,6 @@
                     </svg>
                     <a href="cloud_integrations.html">Cloud Integrations</a>
                 </li>
-                <li class="item">
-                    <img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
-                    <a href="radiobridge.html">RadioBridge Config</a>
-                </li>
             </ul>
         </div>
         <div class="nav-profile">
@@ -662,7 +659,10 @@
 
     <section>
         <div class="container">
-            <h2 class="section-title">Sensor Data Visualization <button type="button" class="help-button" onclick="alert('View real-time charts and status indicators for sensors on your network. Data is extracted from cached uplink messages (Uplinks page). Select a sensor and use date range or quick ranges to filter. Use Customize charts to choose which series to show and chart type (line/bar). Use Field visibility to exclude or include-only fields per decoder.')" title="Help">?</button></h2>
+            <h2 class="section-title">Sensor Data Visualization</h2>
+            <p style="margin: 6px 0 14px; color: #666; font-size: 13px;">
+                View status indicators and charts from cached uplinks. Select a sensor, then use date filters and chart options to focus data.
+            </p>
 
             <div class="sensor-selector">
                 <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
@@ -2319,7 +2319,7 @@
                     const lower = displayValue.toLowerCase();
                     
                     if (isAlarmField) {
-                        // Alarm semantics: active alarm = red, cleared = green
+                        // Alarm semantics: active alarm = red, neutral/cleared = grey
                         const isActive = (lower === 'true' || lower === 'on' || lower === 'yes' ||
                                           lower === '1' || lower.includes('active') || lower.includes('triggered'));
                         if (isActive) {

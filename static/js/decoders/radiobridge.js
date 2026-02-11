@@ -456,6 +456,96 @@
 
   // --- RadioBridge Encoders ---
   var radioBridgeEncoders = [
+    // General Sensor Configuration (matches templates/GeneralConfig/script.js)
+    {
+      id: 'rb_general_config',
+      name: 'General Sensor Configuration',
+      defaultPort: 1,
+      schema: [
+        { key: 'disable_all_events', label: 'Disable All Events', type: 'select', options: [
+          { value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }
+        ]},
+        { key: 'enable_adr', label: 'Enable ADR', type: 'select', options: [
+          { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }
+        ]},
+        { key: 'confirmed_messages', label: 'Use Confirmed Messages', type: 'select', options: [
+          { value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }
+        ]},
+        { key: 'num_retries', label: 'Retries (0-7)', type: 'number', default: 0 },
+        { key: 'time_type', label: 'Supervisory Interval Type', type: 'select', options: [
+          { value: 'hours', label: 'Hours' }, { value: 'minutes', label: 'Minutes' }
+        ]},
+        { key: 'supervisory_interval', label: 'Supervisory Interval (1-127)', type: 'number', default: 24 },
+        { key: 'sampling_period', label: 'Sampling Period', type: 'select', options: [
+          { value: 'unchanged', label: 'Unchanged' },
+          { value: 'milliseconds', label: 'Milliseconds' },
+          { value: 'seconds', label: 'Seconds' },
+          { value: 'minutes', label: 'Minutes' },
+          { value: 'hours', label: 'Hours' }
+        ]},
+        { key: 'time_period', label: 'Time Period', type: 'number', default: 1 }
+      ],
+      encode: function (p) {
+        function calcRadioHex(enableAdr, confirmed, retries) {
+          var r = Math.max(0, Math.min(7, Number(retries) || 0));
+          if (enableAdr && confirmed) {
+            var valsAdrConfirmed = ['00', '04', '08', '0C', '10', '14', '18', '1C'];
+            return valsAdrConfirmed[r];
+          }
+          if (!enableAdr && confirmed) {
+            var valsNoAdrConfirmed = ['01', '05', '09', '0D', '11', '15', '19', '1D'];
+            return valsNoAdrConfirmed[r];
+          }
+          if (enableAdr && !confirmed) return '06';
+          return '07';
+        }
+
+        function calcSupervisoryHex(timeType, interval) {
+          var i = Math.max(1, Math.min(127, Number(interval) || 1));
+          if (timeType === 'minutes') return (0x80 + i).toString(16).toUpperCase().padStart(2, '0');
+          return i.toString(16).toUpperCase().padStart(2, '0');
+        }
+
+        function calcSamplingHex(period, timePeriod) {
+          var tp = Number(timePeriod) || 0;
+          if (period === 'seconds') return (tp + 64).toString(16).toUpperCase().padStart(2, '0');
+          if (period === 'minutes') return (tp + 128).toString(16).toUpperCase().padStart(2, '0');
+          if (period === 'hours') return (tp + 192).toString(16).toUpperCase().padStart(2, '0');
+          if (period === 'milliseconds') return Math.floor(tp / 250).toString(16).toUpperCase().padStart(2, '0');
+          return '';
+        }
+
+        var disableEventsHex = p.disable_all_events === 'yes' ? '01' : '00';
+        var adr = p.enable_adr !== 'no';
+        var confirmed = p.confirmed_messages === 'yes';
+        var radioHex = calcRadioHex(adr, confirmed, p.num_retries);
+        var supervisoryHex = calcSupervisoryHex(p.time_type || 'hours', p.supervisory_interval);
+        var samplingHex = calcSamplingHex(p.sampling_period || 'unchanged', p.time_period);
+        var hex = '01' + disableEventsHex + radioHex + supervisoryHex + samplingHex + '00000000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+
+    // Advanced Sensor Configuration (matches templates/AdvancedConfig/js/script.js)
+    {
+      id: 'rb_advanced_config',
+      name: 'Advanced Sensor Configuration',
+      defaultPort: 1,
+      schema: [
+        { key: 'link_quality_period', label: 'Link Quality Check Period', type: 'select', options: [
+          { value: 'hours', label: 'Hours' }, { value: 'minutes', label: 'Minutes' }
+        ]},
+        { key: 'link_quality_value', label: 'Time Value', type: 'number', default: 24 }
+      ],
+      encode: function (p) {
+        var v = Math.max(1, Math.min(127, Number(p.link_quality_value) || 1));
+        var linkQualityValue = p.link_quality_period === 'minutes' ? (v + 128) : v;
+        var linkQualityHex = linkQualityValue.toString(16).toUpperCase().padStart(2, '0');
+        var hex = 'FC0001' + linkQualityHex + '00000000';
+        return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
+      }
+    },
+
     // Temperature Sensor
     {
       id: 'rb_temp_config',
@@ -651,18 +741,25 @@
       name: 'Water Sensor Config',
       defaultPort: 1,
       schema: [
-        { key: 'periodic', label: 'Periodic Reporting', type: 'select', required: true, options: [
-          { value: 'disabled', label: 'Disabled' },
-          { value: 'minutes', label: 'Minutes' },
-          { value: 'hours', label: 'Hours' }
+        { key: 'report_water_present', label: 'Water Present Notification', type: 'select', options: [
+          { value: 'yes', label: 'Enable' }, { value: 'no', label: 'Disable' }
         ]},
-        { key: 'period_value', label: 'Period (1-127)', type: 'number', default: 60 },
-        { key: 'sensitivity', label: 'Sensitivity (0-255)', type: 'number', default: 128 }
+        { key: 'report_water_not_present', label: 'Water Not Present Notification', type: 'select', options: [
+          { value: 'yes', label: 'Enable' }, { value: 'no', label: 'Disable' }
+        ]},
+        { key: 'threshold', label: 'Threshold (0-255)', type: 'number', default: 80 },
+        { key: 'restoral_margin', label: 'Restoral Margin (0-255)', type: 'number', default: 0 }
       ],
       encode: function (p) {
-        var pHex = periodicHex(p.periodic, p.period_value);
-        var sensitivity = hexByte(Number(p.sensitivity) || 128);
-        var hex = '08' + '00' + pHex + sensitivity + '00000000';
+        var wp = p.report_water_present !== 'no';
+        var wnp = p.report_water_not_present !== 'no';
+        var wpnpHex = '03';
+        if (wp && wnp) wpnpHex = '00';
+        else if (wp && !wnp) wpnpHex = '02';
+        else if (!wp && wnp) wpnpHex = '01';
+        var thresholdHex = hexByte(Number(p.threshold) || 80);
+        var restoralHex = hexByte(Number(p.restoral_margin) || 0);
+        var hex = '08' + wpnpHex + thresholdHex + restoralHex + '00000000';
         return { port: 1, data_hex: hex, data_base64: hexToBase64(hex) };
       }
     },

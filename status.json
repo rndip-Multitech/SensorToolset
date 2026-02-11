@@ -1,3 +1,4 @@
 {
-  "lan_ip": null
+  "pid": 0,
+  "AppInfo": "Listening at: (written when server starts)"
 }
