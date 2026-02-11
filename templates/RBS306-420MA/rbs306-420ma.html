@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4-20 mA Sensor Configuration</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=1">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="../MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>4-20 mA Sensor Configuration</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="../index.html">Home</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
+                    <a href="../uplinks.html">Uplinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/bar-chart.svg" width="24" height="24" class="icon-margin" alt="Sensors">
+                    <a href="../sensors.html">Sensors</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
+                    <a href="../downlinks.html">Send Downlinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
+                    <a href="../decoders.html">Decoders</a>
+                </li>
+                <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <a href="../cloud_integrations.html">Cloud Integrations</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
+                    <a href="../radiobridge.html">RadioBridge Config</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2026 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <img src="rbs306-420mA.png" alt="RBS306-420MA Sensor" class="sensor-image" style="max-width: 200px; margin-bottom: 20px;">
+
+
+    <!-- =========================== -->
+    <!-- CURRENT SETTINGS SECTION    -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Current Measurement Settings</h3>
+
+        <!-- Lower Threshold -->
+        <div class="row">
+            <div class="column">
+                <label class="inline-label" for="lowerThreshold">Lower Threshold (mA):</label>
+                <input type="number" id="lowerThreshold" class="input-small" min="4" max="20" step="0.1" value="4">
+            </div>
+        </div>
+
+        <!-- Upper Threshold -->
+        <div class="row">
+            <div class="column">
+                <label class="inline-label" for="upperThreshold">Upper Threshold (mA):</label>
+                <input type="number" id="upperThreshold" class="input-small" min="4" max="20" step="0.1" value="20">
+            </div>
+            <button id="about-threshold-button" class="help-button">?</button>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- REPORTING SETTINGS SECTION  -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Reporting Settings</h3>
+
+        <!-- Reporting Interval -->
+        <div class="row">
+            <div class="column">
+                <label class="inline-label" for="reportingInterval">Reporting Interval:</label>
+                <select id="reportingInterval" class="input-medium">
+                    <option value="01">1 Minute</option>
+                    <option value="05">5 Minutes</option>
+                    <option value="0a">10 Minutes</option>
+                    <option value="0f">15 Minutes</option>
+                    <option value="1e" selected>30 Minutes</option>
+                    <option value="3c">1 Hour</option>
+                    <option value="78">2 Hours</option>
+                    <option value="f0">4 Hours</option>
+                </select>
+            </div>
+            <button id="about-interval-button" class="help-button">?</button>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATED HEX SECTION       -->
+    <!-- =========================== -->
+    <section id="hex-section" class="section" style="display:none;">
+        <div class="row">
+            <h3 class="inline-title">Generated Hexcode:</h3>
+            <span id="hex-output" class="hex-display"></span>
+        </div>
+
+        <button id="copy-button" class="action-button">Copy Hexcode</button>
+        <button id="how-button" class="action-button">How to Use Hexcode</button>
+        <button id="schedule-button" class="action-button" style="background-color: #2196f3; color: white;">Schedule Downlink</button>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATE BUTTON             -->
+    <!-- =========================== -->
+    <button id="generate-button" class="generate-button">
+        Generate Hexcode
+    </button>
+
+
+        </div>
+    </section>
+
+    <script src="js/script.js?v=1"></script>
+</body>
+</html>
+

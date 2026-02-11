@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Integrations</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .panel {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .panel h3 {
+            margin-top: 0;
+            color: #00394d;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: bold;
+            color: #00394d;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            max-width: 500px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        .form-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+        .form-group .hint {
+            color: #666;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .form-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .form-row .form-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        .integration-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .integration-card.disabled {
+            opacity: 0.6;
+        }
+        .integration-info {
+            flex: 1;
+        }
+        .integration-name {
+            font-weight: bold;
+            font-size: 16px;
+            color: #00394d;
+        }
+        .integration-type {
+            color: #666;
+            font-size: 13px;
+            margin-top: 2px;
+        }
+        .integration-type .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-right: 8px;
+        }
+        .badge-webhook { background: #e3f2fd; color: #1565c0; }
+        .badge-mqtt { background: #f3e5f5; color: #7b1fa2; }
+        .badge-udp { background: #fff3e0; color: #e65100; }
+        .badge-tcp { background: #e8f5e9; color: #2e7d32; }
+        .integration-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 26px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #4caf50;
+        }
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background: #00394d;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #005570;
+        }
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+        .status-msg {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .status-msg.ok { background: #e8f5e9; border: 1px solid #c8e6c9; color: #1b5e20; display: block; }
+        .status-msg.err { background: #ffebee; border: 1px solid #ffcdd2; color: #b71c1c; display: block; }
+        .config-section {
+            display: none;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .config-section.active {
+            display: block;
+        }
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-backdrop.active {
+            display: flex;
+        }
+        .modal {
+            background: white;
+            border-radius: 8px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        .modal h2 {
+            margin-top: 0;
+            color: #00394d;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>Cloud Integrations</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="index.html">Home</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
+                    <a href="uplinks.html">Uplinks</a>
+                </li>
+                <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M3 3v18h18"></path>
+                        <path d="M7 16l4-4 4 4 6-6"></path>
+                    </svg>
+                    <a href="sensors.html">Sensors</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
+                    <a href="downlinks.html">Send Downlinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
+                    <a href="decoders.html">Decoders</a>
+                </li>
+                <li class="item active">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <a href="cloud_integrations.html">Cloud Integrations</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
+                    <a href="radiobridge.html">RadioBridge Config</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2026 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <h2 class="section-title">Cloud Integrations <button type="button" class="help-button" onclick="alert('Forward decoded and raw uplink data to external cloud services.\n\n• HTTP Webhook – POST JSON to any URL (Bearer, Basic, or API key auth)\n• MQTT – Publish to an external broker (TLS and certs supported)\n• UDP – Send JSON datagrams\n• TCP – Send JSON over TCP (TLS supported)\n\nEach integration can filter by DevEUI or event type, and send raw payload, decoded data, or both.')" title="Help">?</button></h2>
+
+            <div id="statusMsg" class="status-msg"></div>
+
+            <div class="panel">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0;">Configured Integrations</h3>
+                    <button class="btn btn-primary" onclick="openAddModal()">+ Add Integration</button>
+                </div>
+                <div id="integrationsList" style="margin-top: 16px;">
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                        </svg>
+                        <p>No integrations configured yet.<br>Click "Add Integration" to forward uplinks to a cloud service.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Add/Edit Modal -->
+    <div id="modal" class="modal-backdrop">
+        <div class="modal">
+            <h2 id="modalTitle">Add Integration</h2>
+            <form id="integrationForm" onsubmit="saveIntegration(event)">
+                <input type="hidden" id="editId" value="">
+
+                <div class="form-group">
+                    <label for="intName">Name</label>
+                    <input type="text" id="intName" required placeholder="e.g. My Cloud Service">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="intType">Type</label>
+                        <select id="intType" onchange="showTypeConfig()">
+                            <option value="webhook">HTTP Webhook</option>
+                            <option value="mqtt">MQTT</option>
+                            <option value="udp">UDP</option>
+                            <option value="tcp">TCP</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="intEnabled">
+                            <input type="checkbox" id="intEnabled" checked> Enabled
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Webhook Config -->
+                <div id="configWebhook" class="config-section active">
+                    <h4>Webhook Configuration</h4>
+                    <div class="form-group">
+                        <label for="webhookUrl">URL</label>
+                        <input type="url" id="webhookUrl" placeholder="https://example.com/webhook">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="webhookMethod">Method</label>
+                            <select id="webhookMethod">
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="webhookAuth">Authentication</label>
+                            <select id="webhookAuth" onchange="showAuthConfig()">
+                                <option value="none">None</option>
+                                <option value="bearer">Bearer Token</option>
+                                <option value="basic">Basic Auth</option>
+                                <option value="api_key">API Key Header</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="authBearer" class="form-group" style="display:none;">
+                        <label for="webhookToken">Bearer Token</label>
+                        <input type="text" id="webhookToken" placeholder="Your token">
+                    </div>
+                    <div id="authBasic" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="webhookUsername">Username</label>
+                                <input type="text" id="webhookUsername">
+                            </div>
+                            <div class="form-group">
+                                <label for="webhookPassword">Password</label>
+                                <input type="password" id="webhookPassword">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="authApiKey" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="webhookApiKeyName">Header Name</label>
+                                <input type="text" id="webhookApiKeyName" placeholder="X-API-Key">
+                            </div>
+                            <div class="form-group">
+                                <label for="webhookApiKeyValue">API Key</label>
+                                <input type="text" id="webhookApiKeyValue">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="webhookSkipSsl"> Skip SSL verification (for self-signed certs)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- MQTT Config -->
+                <div id="configMqtt" class="config-section">
+                    <h4>MQTT Configuration</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mqttBroker">Broker Host</label>
+                            <input type="text" id="mqttBroker" placeholder="broker.example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="mqttPort">Port</label>
+                            <input type="number" id="mqttPort" value="1883">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="mqttTopic">Topic <button type="button" class="help-button" onclick="alert('Use {deveui} as placeholder, e.g. sensor/{deveui}/uplink')" title="Help">?</button></label>
+                        <input type="text" id="mqttTopic" placeholder="sensor/uplinks" value="sensor/uplinks">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mqttUsername">Username (optional)</label>
+                            <input type="text" id="mqttUsername">
+                        </div>
+                        <div class="form-group">
+                            <label for="mqttPassword">Password (optional)</label>
+                            <input type="password" id="mqttPassword">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mqttQos">QoS</label>
+                            <select id="mqttQos">
+                                <option value="0">0 - At most once</option>
+                                <option value="1" selected>1 - At least once</option>
+                                <option value="2">2 - Exactly once</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="mqttTls"> Use TLS
+                            </label>
+                            <label style="margin-left: 16px;">
+                                <input type="checkbox" id="mqttSkipSsl"> Skip SSL verify
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 12px;">
+                        <details>
+                            <summary style="cursor: pointer; font-weight: bold;">Certificates (optional) <button type="button" class="help-button" onclick="event.preventDefault(); event.stopPropagation(); alert('Paste PEM content for TLS. Leave empty to use system CA or skip verify. CA cert verifies the broker; client cert + key enable mutual TLS.');" title="Help">?</button></summary>
+                            <div class="form-group">
+                                <label for="mqttCaCert">CA certificate (PEM)</label>
+                                <textarea id="mqttCaCert" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style="width:100%; max-width:500px; padding:8px; border:1px solid #ddd; border-radius:4px; font-family:monospace; font-size:12px;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqttClientCert">Client certificate (PEM, for mutual TLS)</label>
+                                <textarea id="mqttClientCert" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style="width:100%; max-width:500px; padding:8px; border:1px solid #ddd; border-radius:4px; font-family:monospace; font-size:12px;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqttClientKey">Client key (PEM, for mutual TLS)</label>
+                                <textarea id="mqttClientKey" rows="3" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="width:100%; max-width:500px; padding:8px; border:1px solid #ddd; border-radius:4px; font-family:monospace; font-size:12px;"></textarea>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- UDP Config -->
+                <div id="configUdp" class="config-section">
+                    <h4>UDP Configuration</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="udpHost">Host</label>
+                            <input type="text" id="udpHost" placeholder="192.168.1.100">
+                        </div>
+                        <div class="form-group">
+                            <label for="udpPort">Port</label>
+                            <input type="number" id="udpPort" placeholder="9000">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TCP Config -->
+                <div id="configTcp" class="config-section">
+                    <h4>TCP Configuration</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tcpHost">Host</label>
+                            <input type="text" id="tcpHost" placeholder="192.168.1.100">
+                        </div>
+                        <div class="form-group">
+                            <label for="tcpPort">Port</label>
+                            <input type="number" id="tcpPort" placeholder="9000">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="tcpTls"> Use TLS
+                            </label>
+                            <label style="margin-left: 16px;">
+                                <input type="checkbox" id="tcpSkipSsl"> Skip SSL verify
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payload Options -->
+                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
+                    <h4>Payload Options</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="payloadFormat">Data Format</label>
+                            <select id="payloadFormat">
+                                <option value="both">Both (raw + decoded)</option>
+                                <option value="decoded">Decoded only</option>
+                                <option value="raw">Raw only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="includeMetadata" checked> Include metadata (RSSI, SNR, freq)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
+                    <h4>Filters (optional)</h4>
+                    <div class="form-group">
+                        <label for="filterDeveui">DevEUI filter (comma-separated, leave empty for all)</label>
+                        <input type="text" id="filterDeveui" placeholder="70-B3-D5-XX-XX-XX-XX-XX, ...">
+                    </div>
+                    <div class="form-group">
+                        <label for="filterEvents">Event type filter (comma-separated, leave empty for all)</label>
+                        <input type="text" id="filterEvents" placeholder="temperature, water, door_window, ...">
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="button" class="btn btn-success" onclick="testCurrentConfig()">Test Connection</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let integrations = [];
+
+        function showStatus(type, msg) {
+            const el = document.getElementById('statusMsg');
+            el.className = 'status-msg ' + (type === 'ok' ? 'ok' : 'err');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 5000);
+        }
+
+        function showTypeConfig() {
+            const type = document.getElementById('intType').value;
+            document.querySelectorAll('.config-section').forEach(el => el.classList.remove('active'));
+            const sectionId = 'config' + type.charAt(0).toUpperCase() + type.slice(1);
+            const section = document.getElementById(sectionId);
+            if (section) section.classList.add('active');
+        }
+
+        function showAuthConfig() {
+            const auth = document.getElementById('webhookAuth').value;
+            document.getElementById('authBearer').style.display = auth === 'bearer' ? 'block' : 'none';
+            document.getElementById('authBasic').style.display = auth === 'basic' ? 'block' : 'none';
+            document.getElementById('authApiKey').style.display = auth === 'api_key' ? 'block' : 'none';
+        }
+
+        function openAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add Integration';
+            document.getElementById('editId').value = '';
+            document.getElementById('integrationForm').reset();
+            document.getElementById('intEnabled').checked = true;
+            document.getElementById('includeMetadata').checked = true;
+            showTypeConfig();
+            showAuthConfig();
+            document.getElementById('modal').classList.add('active');
+        }
+
+        function openEditModal(id) {
+            const integ = integrations.find(i => i.id === id);
+            if (!integ) return;
+            
+            document.getElementById('modalTitle').textContent = 'Edit Integration';
+            document.getElementById('editId').value = id;
+            document.getElementById('intName').value = integ.name || '';
+            document.getElementById('intType').value = integ.type || 'webhook';
+            document.getElementById('intEnabled').checked = integ.enabled !== false;
+            
+            // Payload options
+            const payload = integ.payload || {};
+            document.getElementById('payloadFormat').value = payload.format || 'both';
+            document.getElementById('includeMetadata').checked = payload.include_metadata !== false;
+            
+            // Filters
+            const filters = integ.filters || {};
+            document.getElementById('filterDeveui').value = (filters.deveui || []).join(', ');
+            document.getElementById('filterEvents').value = (filters.event_types || []).join(', ');
+            
+            // Type-specific config
+            const cfg = integ.config || {};
+            showTypeConfig();
+            
+            if (integ.type === 'webhook') {
+                document.getElementById('webhookUrl').value = cfg.url || '';
+                document.getElementById('webhookMethod').value = cfg.method || 'POST';
+                document.getElementById('webhookAuth').value = cfg.auth_type || 'none';
+                document.getElementById('webhookToken').value = cfg.auth_token || '';
+                document.getElementById('webhookUsername').value = cfg.auth_username || '';
+                document.getElementById('webhookPassword').value = cfg.auth_password || '';
+                document.getElementById('webhookApiKeyName').value = cfg.api_key_name || 'X-API-Key';
+                document.getElementById('webhookApiKeyValue').value = cfg.api_key_value || '';
+                document.getElementById('webhookSkipSsl').checked = cfg.skip_ssl_verify || false;
+                showAuthConfig();
+            } else if (integ.type === 'mqtt') {
+                document.getElementById('mqttBroker').value = cfg.broker || '';
+                document.getElementById('mqttPort').value = cfg.port || 1883;
+                document.getElementById('mqttTopic').value = cfg.topic || 'sensor/uplinks';
+                document.getElementById('mqttUsername').value = cfg.username || '';
+                document.getElementById('mqttPassword').value = cfg.password || '';
+                document.getElementById('mqttQos').value = cfg.qos || 1;
+                document.getElementById('mqttTls').checked = cfg.use_tls || false;
+                document.getElementById('mqttSkipSsl').checked = cfg.skip_ssl_verify || false;
+                document.getElementById('mqttCaCert').value = cfg.mqtt_ca_cert_pem || '';
+                document.getElementById('mqttClientCert').value = cfg.mqtt_client_cert_pem || '';
+                document.getElementById('mqttClientKey').value = cfg.mqtt_client_key_pem || '';
+            } else if (integ.type === 'udp') {
+                document.getElementById('udpHost').value = cfg.host || '';
+                document.getElementById('udpPort').value = cfg.port || '';
+            } else if (integ.type === 'tcp') {
+                document.getElementById('tcpHost').value = cfg.host || '';
+                document.getElementById('tcpPort').value = cfg.port || '';
+                document.getElementById('tcpTls').checked = cfg.use_tls || false;
+                document.getElementById('tcpSkipSsl').checked = cfg.skip_ssl_verify || false;
+            }
+            
+            document.getElementById('modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+        function buildIntegrationFromForm() {
+            const type = document.getElementById('intType').value;
+            const integ = {
+                name: document.getElementById('intName').value.trim(),
+                type: type,
+                enabled: document.getElementById('intEnabled').checked,
+                config: {},
+                payload: {
+                    format: document.getElementById('payloadFormat').value,
+                    include_metadata: document.getElementById('includeMetadata').checked,
+                },
+                filters: {},
+            };
+            
+            // Parse filters
+            const deveuiRaw = document.getElementById('filterDeveui').value.trim();
+            if (deveuiRaw) {
+                integ.filters.deveui = deveuiRaw.split(',').map(s => s.trim()).filter(s => s);
+            }
+            const eventsRaw = document.getElementById('filterEvents').value.trim();
+            if (eventsRaw) {
+                integ.filters.event_types = eventsRaw.split(',').map(s => s.trim()).filter(s => s);
+            }
+            
+            // Type-specific config
+            if (type === 'webhook') {
+                integ.config.url = document.getElementById('webhookUrl').value.trim();
+                integ.config.method = document.getElementById('webhookMethod').value;
+                integ.config.auth_type = document.getElementById('webhookAuth').value;
+                if (integ.config.auth_type === 'bearer') {
+                    integ.config.auth_token = document.getElementById('webhookToken').value;
+                } else if (integ.config.auth_type === 'basic') {
+                    integ.config.auth_username = document.getElementById('webhookUsername').value;
+                    integ.config.auth_password = document.getElementById('webhookPassword').value;
+                } else if (integ.config.auth_type === 'api_key') {
+                    integ.config.api_key_name = document.getElementById('webhookApiKeyName').value || 'X-API-Key';
+                    integ.config.api_key_value = document.getElementById('webhookApiKeyValue').value;
+                }
+                integ.config.skip_ssl_verify = document.getElementById('webhookSkipSsl').checked;
+            } else if (type === 'mqtt') {
+                integ.config.broker = document.getElementById('mqttBroker').value.trim();
+                integ.config.port = parseInt(document.getElementById('mqttPort').value) || 1883;
+                integ.config.topic = document.getElementById('mqttTopic').value.trim() || 'sensor/uplinks';
+                integ.config.username = document.getElementById('mqttUsername').value;
+                integ.config.password = document.getElementById('mqttPassword').value;
+                integ.config.qos = parseInt(document.getElementById('mqttQos').value) || 1;
+                integ.config.use_tls = document.getElementById('mqttTls').checked;
+                integ.config.skip_ssl_verify = document.getElementById('mqttSkipSsl').checked;
+                integ.config.mqtt_ca_cert_pem = document.getElementById('mqttCaCert').value.trim();
+                integ.config.mqtt_client_cert_pem = document.getElementById('mqttClientCert').value.trim();
+                integ.config.mqtt_client_key_pem = document.getElementById('mqttClientKey').value.trim();
+            } else if (type === 'udp') {
+                integ.config.host = document.getElementById('udpHost').value.trim();
+                integ.config.port = parseInt(document.getElementById('udpPort').value) || 0;
+            } else if (type === 'tcp') {
+                integ.config.host = document.getElementById('tcpHost').value.trim();
+                integ.config.port = parseInt(document.getElementById('tcpPort').value) || 0;
+                integ.config.use_tls = document.getElementById('tcpTls').checked;
+                integ.config.skip_ssl_verify = document.getElementById('tcpSkipSsl').checked;
+            }
+            
+            return integ;
+        }
+
+        async function saveIntegration(e) {
+            e.preventDefault();
+            const editId = document.getElementById('editId').value;
+            const integ = buildIntegrationFromForm();
+            
+            if (!integ.name) {
+                showStatus('err', 'Name is required');
+                return;
+            }
+            
+            try {
+                let res;
+                if (editId) {
+                    res = await fetch('/api/integrations/' + editId, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(integ),
+                    });
+                } else {
+                    res = await fetch('/api/integrations', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(integ),
+                    });
+                }
+                
+                const data = await res.json();
+                if (!res.ok) {
+                    showStatus('err', data.error || 'Failed to save');
+                    return;
+                }
+                
+                closeModal();
+                showStatus('ok', editId ? 'Integration updated' : 'Integration added');
+                loadIntegrations();
+            } catch (e) {
+                showStatus('err', 'Error: ' + e);
+            }
+        }
+
+        async function deleteIntegration(id) {
+            if (!confirm('Delete this integration?')) return;
+            try {
+                const res = await fetch('/api/integrations/' + id, { method: 'DELETE' });
+                if (!res.ok) {
+                    const data = await res.json();
+                    showStatus('err', data.error || 'Delete failed');
+                    return;
+                }
+                showStatus('ok', 'Integration deleted');
+                loadIntegrations();
+            } catch (e) {
+                showStatus('err', 'Error: ' + e);
+            }
+        }
+
+        async function toggleEnabled(id, enabled) {
+            try {
+                await fetch('/api/integrations/' + id + '/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: enabled }),
+                });
+                loadIntegrations();
+            } catch (e) {
+                showStatus('err', 'Toggle failed: ' + e);
+            }
+        }
+
+        async function testIntegration(id) {
+            try {
+                const res = await fetch('/api/integrations/' + id + '/test', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showStatus('ok', 'Test successful: ' + (data.message || 'OK'));
+                } else {
+                    showStatus('err', 'Test failed: ' + (data.message || 'Unknown error'));
+                }
+            } catch (e) {
+                showStatus('err', 'Test error: ' + e);
+            }
+        }
+
+        async function testCurrentConfig() {
+            const integ = buildIntegrationFromForm();
+            try {
+                const res = await fetch('/api/integrations/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(integ),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showStatus('ok', 'Test successful: ' + (data.message || 'OK'));
+                } else {
+                    showStatus('err', 'Test failed: ' + (data.message || 'Unknown error'));
+                }
+            } catch (e) {
+                showStatus('err', 'Test error: ' + e);
+            }
+        }
+
+        function renderIntegrations() {
+            const container = document.getElementById('integrationsList');
+            if (!integrations.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                        </svg>
+                        <p>No integrations configured yet.<br>Click "Add Integration" to forward uplinks to a cloud service.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = integrations.map(integ => {
+                const typeClass = 'badge-' + integ.type;
+                const disabledClass = integ.enabled ? '' : 'disabled';
+                const cfgSummary = getConfigSummary(integ);
+                return `
+                    <div class="integration-card ${disabledClass}">
+                        <div class="integration-info">
+                            <div class="integration-name">${escapeHtml(integ.name)}</div>
+                            <div class="integration-type">
+                                <span class="badge ${typeClass}">${integ.type.toUpperCase()}</span>
+                                ${escapeHtml(cfgSummary)}
+                            </div>
+                        </div>
+                        <div class="integration-actions">
+                            <button class="btn btn-secondary" onclick="testIntegration('${integ.id}')">Test</button>
+                            <button class="btn btn-secondary" onclick="openEditModal('${integ.id}')">Edit</button>
+                            <button class="btn btn-danger" onclick="deleteIntegration('${integ.id}')">Delete</button>
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${integ.enabled ? 'checked' : ''} onchange="toggleEnabled('${integ.id}', this.checked)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function getConfigSummary(integ) {
+            const cfg = integ.config || {};
+            if (integ.type === 'webhook') return cfg.url || '';
+            if (integ.type === 'mqtt') return (cfg.broker || '') + ':' + (cfg.port || 1883) + ' → ' + (cfg.topic || '');
+            if (integ.type === 'udp') return (cfg.host || '') + ':' + (cfg.port || '');
+            if (integ.type === 'tcp') return (cfg.host || '') + ':' + (cfg.port || '');
+            return '';
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        async function loadIntegrations() {
+            try {
+                const res = await fetch('/api/integrations');
+                const data = await res.json();
+                integrations = data.integrations || [];
+                renderIntegrations();
+            } catch (e) {
+                console.error('Load integrations failed:', e);
+            }
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        // Initial load
+        loadIntegrations();
+    </script>
+</body>
+</html>

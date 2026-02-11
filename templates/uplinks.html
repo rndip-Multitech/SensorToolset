@@ -1,0 +1,1788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uplinks</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #e0e0e0;
+            font-size: 13px;
+        }
+
+        th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            color: #00394d;
+        }
+
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        tr:hover {
+            background-color: #f0f0f0;
+        }
+
+        .form-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+
+        .form-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1em;
+        }
+
+        .form-group label {
+            margin-right: 1em;
+            font-weight: bold;
+            color: #00394d;
+            min-width: 150px;
+        }
+
+        .form-group input {
+            flex: 1;
+            max-width: 300px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'PoppinsFont', Gotham, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        .filter-section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+
+        .filter-section label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #00394d;
+        }
+
+        .filter-section input {
+            width: 100%;
+            max-width: 400px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'PoppinsFont', Gotham, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        .message-data {
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .message-data em {
+            color: #666;
+            font-style: normal;
+            font-weight: normal;
+        }
+
+        .message-data strong {
+            color: #00394d;
+            font-weight: bold;
+        }
+
+        .data-box {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin: 6px 0;
+            background: #ffffff;
+        }
+
+        .data-box.decoded {
+            background: #e8f5e9;
+            border-color: #c8e6c9;
+        }
+
+        .data-box.raw {
+            background: #fff8e1;
+            border-color: #ffe0b2;
+        }
+
+        .data-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #00394d;
+            margin-bottom: 6px;
+        }
+
+        .data-pre {
+            white-space: pre-wrap;
+            margin: 0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+
+        button.action-button {
+            padding: 6px 12px;
+            margin: 2px;
+            font-size: 12px;
+        }
+
+        select.decoder-select {
+            padding: 6px 8px;
+            margin: 2px;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            max-width: 220px;
+        }
+
+        .actions-wrap {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 800px;
+            border-radius: 4px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: #000;
+        }
+
+        #modalText {
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .status-connected {
+            background-color: #4caf50;
+        }
+
+        .status-disconnected {
+            background-color: #9e9e9e;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>Uplinks</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="index.html">Home</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
+                    <a href="uplinks.html">Uplinks</a>
+                </li>
+                <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M3 3v18h18"></path>
+                        <path d="M7 16l4-4 4 4 6-6"></path>
+                    </svg>
+                    <a href="sensors.html">Sensors</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
+                    <a href="downlinks.html">Send Downlinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
+                    <a href="decoders.html">Decoders</a>
+                </li>
+                <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <a href="cloud_integrations.html">Cloud Integrations</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
+                    <a href="radiobridge.html">RadioBridge Config</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2026 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <div id="notification" style="display: none; position: fixed; top: 20px; right: 20px; background-color: #4caf50; color: white; padding: 15px 20px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 1000;"></div>
+            <h2 class="section-title">Connect to MultiTech Gateway</h2>
+            <div class="form-section">
+                <!-- Use both inline onsubmit and a JS event listener.
+                     Both call the same (overridden) global connectToBroker, so either path works
+                     even if one wiring mechanism fails on some browsers/environments. -->
+                <form id="connectForm" onsubmit="connectToBroker(event)">
+                    <div class="form-group">
+                        <label for="broker">MQTT Broker IP:</label>
+                        <input type="text" id="broker" name="broker" value="127.0.0.1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="port">Port:</label>
+                        <input type="number" id="port" name="port" value="1883" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="topic">Topic:</label>
+                        <input type="text" id="topic" name="topic" value="lora/+/up" required>
+                    </div>
+                    <button type="submit">Connect</button>
+                    <span id="connectionStatus" style="margin-left: 10px;">
+                        <span class="status-indicator status-disconnected"></span>
+                        <span>Disconnected</span>
+                    </span>
+                </form>
+            </div>
+
+            <div class="filter-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3 style="margin: 0; color: #00394d;">Filters & Cache</h3>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="action-button" id="uploadHistoryBtn" title="Import packet history from gateway JSON export">Import history</button>
+                        <input type="file" id="uploadHistoryInput" accept=".json,application/json" style="display: none;">
+                        <button type="button" class="action-button" id="downloadCSVBtn">Download CSV</button>
+                        <button type="button" class="action-button" id="downloadJSONBtn">Download JSON</button>
+                        <button type="button" class="action-button" id="clearCacheBtn">Clear Cache</button>
+                    </div>
+                </div>
+                <div id="cacheStats" style="margin-bottom: 12px; color: #666; font-size: 12px;">Cached messages: 0</div>
+                
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label for="filter" style="min-width: 120px;">Search:</label>
+                    <input type="text" id="filter" name="filter" placeholder="Search for messages..." style="flex: 1; max-width: none;">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label for="filterDevEui" style="min-width: 120px;">DevEUI:</label>
+                    <select id="filterDevEui" name="filterDevEui" class="decoder-select" style="flex: 1; max-width: none;" title="Filter to a single DevEUI (populated from cached messages)">
+                        <option value="">-- All devices --</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label for="filterEventType" style="min-width: 120px;">Event Type:</label>
+                    <input type="text" id="filterEventType" name="filterEventType" placeholder="Filter by event type..." style="flex: 1; max-width: none;">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label for="filterDateFrom" style="min-width: 120px;">From Date:</label>
+                    <input type="datetime-local" id="filterDateFrom" name="filterDateFrom" style="flex: 1; max-width: 300px;">
+                    <label for="filterDateTo" style="min-width: 80px; margin-left: 12px;">To:</label>
+                    <input type="datetime-local" id="filterDateTo" name="filterDateTo" style="flex: 1; max-width: 300px;">
+                </div>
+
+                <div class="form-group" style="margin-top: 12px;">
+                    <label for="viewMode">View:</label>
+                    <select id="viewMode" class="decoder-select" title="How to display message data">
+                        <option value="decoded">Decoded</option>
+                        <option value="raw">Raw</option>
+                        <option value="both">Both</option>
+                    </select>
+                    <span style="color:#666; font-size: 12px;">
+                        Decoded = human-readable fields. Raw = payload hex/base64 + metadata.
+                    </span>
+                </div>
+                <div class="form-group" style="margin-top: 8px;">
+                    <span style="font-weight: bold;">Temperature:</span>
+                    <label style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; cursor: pointer;"><input type="radio" name="tempUnitUplinks" value="C"> °C</label>
+                    <label style="display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; cursor: pointer;"><input type="radio" name="tempUnitUplinks" value="F"> °F</label>
+                    <span style="color:#666; font-size: 12px; margin-left: 8px;">Applies to decoded view and CSV/JSON export.</span>
+                </div>
+                <div class="form-group" style="margin-top: 12px;">
+                    <label for="defaultDecoder">Default decoder:</label>
+                    <select id="defaultDecoder" class="decoder-select"></select>
+                    <button type="button" class="action-button" id="clearDecoderMap">Clear per-device</button>
+                    <button type="button" class="action-button" id="reloadDecoders">Reload decoders</button>
+                </div>
+                <p style="margin-top: 6px; color: #666;">
+                    Tip: Use the decoder dropdown in each row (Actions) to pin a decoder per DevEUI.
+                </p>
+                <div id="decoderLoadStatus" style="margin-top: 8px; color: #666; font-size: 12px;"></div>
+            </div>
+
+            <h2 class="section-title">Uplink Messages</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>DevEUI</th>
+                        <th>Topic</th>
+                        <th>Event Type</th>
+                        <th>Message Data</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="messageTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 20px;">
+                            Connect to MQTT broker to start receiving uplink messages
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Modal for displaying full JSON -->
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Full Message JSON</h3>
+            <pre id="modalText"></pre>
+        </div>
+    </div>
+
+    <script src="/static/js/decoders/decoder_registry.js"></script>
+    <script src="/static/js/decoders/server_decoded.js"></script>
+    <script src="/static/js/decoders/radiobridge.js"></script>
+    <script src="/static/js/decoders/sensative_strips.js"></script>
+    <script src="/static/js/decoders/raw.js"></script>
+    <script src="/static/js/mqtt_messages.js"></script>
+    <script>
+        // Override the fetchMessages function to use the correct endpoint
+        const originalFetchMessages = fetchMessages;
+
+        const DECODER_MAP_KEY = 'rbt_decoder_map_by_deveui';
+        const DEFAULT_DECODER_KEY = 'rbt_default_decoder_id';
+        const VIEW_MODE_KEY = 'rbt_uplinks_view_mode';
+        const TEMP_UNIT_KEY = 'sensorTempUnit';
+
+        function getTempUnit() {
+            try {
+                const u = localStorage.getItem(TEMP_UNIT_KEY);
+                return (u === 'F' || u === 'C') ? u : 'C';
+            } catch (e) { return 'C'; }
+        }
+        function setTempUnit(unit) {
+            try {
+                localStorage.setItem(TEMP_UNIT_KEY, unit);
+            } catch (e) {}
+        }
+        function isTempKey(key) {
+            if (!key || typeof key !== 'string') return false;
+            const k = key.toLowerCase();
+            if (k.includes('fahrenheit')) return false;
+            return k.includes('temp') || k.includes('temperature') || k === 'value';
+        }
+        function applyTempUnitToDecoded(decoded) {
+            if (getTempUnit() !== 'F' || !decoded) return decoded;
+            return deepConvertTempsToF(decoded, '');
+        }
+        function deepConvertTempsToF(obj, parentKey) {
+            if (obj === null) return null;
+            if (typeof obj !== 'object') return obj;
+            const parentLower = (parentKey || '').toLowerCase();
+            const inTempContext = parentLower.includes('temp') || parentLower.includes('temperature');
+            if (Array.isArray(obj)) {
+                return obj.map(function (item) { return deepConvertTempsToF(item, parentKey); });
+            }
+            const out = {};
+            for (const k in obj) {
+                if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+                const v = obj[k];
+                const kLower = k.toLowerCase();
+                if (k === 'unit' && inTempContext && typeof v === 'string' && (v === 'C' || v === '\u00B0C' || v === '°C')) {
+                    out[k] = '\u00B0F';
+                    continue;
+                }
+                if (typeof v === 'number' && (inTempContext && kLower === 'value' || isTempKey(k) && kLower !== 'value')) {
+                    out[k] = Math.round((v * 9 / 5 + 32) * 100) / 100;
+                    continue;
+                }
+                if (typeof v === 'object' && v !== null) {
+                    out[k] = deepConvertTempsToF(v, k);
+                    continue;
+                }
+                out[k] = v;
+            }
+            return out;
+        }
+        let customDecodersLoaded = false;
+        let lastCustomDecoderLoadReport = null;
+        
+        // IndexedDB for message caching
+        let db = null;
+        const DB_NAME = 'RBTUplinksDB';
+        const DB_VERSION = 2; // Incremented to handle fingerprint index upgrade
+        const STORE_NAME = 'messages';
+        const MAX_FORWARDED_FINGERPRINTS = 500;
+        let forwardedFingerprints = new Set();
+        
+        // Initialize IndexedDB
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                request.onupgradeneeded = (event) => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains(STORE_NAME)) {
+                        // New database - create with fingerprint index as unique
+                        const objectStore = database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+                        objectStore.createIndex('deveui', 'deveui', { unique: false });
+                        objectStore.createIndex('time', 'time', { unique: false });
+                        objectStore.createIndex('eventType', 'eventType', { unique: false });
+                        objectStore.createIndex('fingerprint', 'fingerprint', { unique: true });
+                    } else {
+                        // Upgrade existing DB: add fingerprint index if it doesn't exist
+                        const objectStore = event.target.transaction.objectStore(STORE_NAME);
+                        if (!objectStore.indexNames.contains('fingerprint')) {
+                            // First, regenerate fingerprints for existing messages that don't have them
+                            // Then create the index as non-unique (we'll clean duplicates first)
+                            objectStore.createIndex('fingerprint', 'fingerprint', { unique: false });
+                        }
+                    }
+                };
+            });
+        }
+        
+        // Remove duplicate messages based on fingerprint (keeps the oldest message for each fingerprint)
+        // Always iterate over ALL records via store.openCursor() so we catch records with no/missing fingerprint.
+        async function removeDuplicates() {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const fingerprints = new Map(); // fingerprint -> record to keep
+                const duplicates = []; // ids to delete
+
+                const request = store.openCursor();
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        const record = cursor.value;
+                        let fingerprint = record.fingerprint;
+
+                        // If no fingerprint, generate from original message or fallback from record fields
+                        if (!fingerprint || typeof fingerprint !== 'string') {
+                            if (record.original) {
+                                fingerprint = getMessageFingerprint(record.original);
+                            } else {
+                                // Fallback: use time + deveui + decoded payload so identical cached rows dedupe
+                                fingerprint = `fallback|${record.time || ''}|${record.deveui || ''}|${JSON.stringify(record.decoded || {})}`;
+                            }
+                            record.fingerprint = fingerprint;
+                            try {
+                                cursor.update(record);
+                            } catch (e) {
+                                console.warn('[Cache] Could not update fingerprint on record:', e);
+                            }
+                        }
+
+                        if (fingerprint) {
+                            if (fingerprints.has(fingerprint)) {
+                                const existing = fingerprints.get(fingerprint);
+                                const recordTime = new Date(record.time || record.cachedAt || 0).getTime();
+                                const existingTime = new Date(existing.time || existing.cachedAt || 0).getTime();
+                                if (recordTime < existingTime) {
+                                    duplicates.push(existing.id);
+                                    fingerprints.set(fingerprint, record);
+                                } else {
+                                    duplicates.push(record.id);
+                                }
+                            } else {
+                                fingerprints.set(fingerprint, record);
+                            }
+                        }
+                        cursor.continue();
+                    } else {
+                        if (duplicates.length > 0) {
+                            console.log(`[Cache] Removing ${duplicates.length} duplicate messages`);
+                            duplicates.forEach(id => store.delete(id));
+                        }
+                        resolve(duplicates.length);
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+        
+        // Generate a unique message fingerprint
+        function getMessageFingerprint(message) {
+            const devEui = getDevEuiFromMessage(message);
+            const dataObj = (message && message.data && typeof message.data === 'object') ? message.data : {};
+            
+            // Use multiple fields to create a unique fingerprint
+            const topic = message.topic || '';
+            const time = dataObj.current_time || dataObj.time || '';
+            
+            // Try to get payload from multiple possible locations
+            let payload = '';
+            if (dataObj.payload_hex) {
+                payload = dataObj.payload_hex;
+            } else if (dataObj.data) {
+                // If data is a string, use it directly; if object, stringify it
+                payload = typeof dataObj.data === 'string' ? dataObj.data : JSON.stringify(dataObj.data);
+            } else if (dataObj.payload) {
+                payload = typeof dataObj.payload === 'string' ? dataObj.payload : JSON.stringify(dataObj.payload);
+            }
+            
+            // Also include packet_count and protocol_version if available (for RadioBridge messages)
+            const packetCount = dataObj.packet_count !== undefined ? String(dataObj.packet_count) : '';
+            const protocolVersion = dataObj.protocol_version !== undefined ? String(dataObj.protocol_version) : '';
+            
+            // Create fingerprint from key message attributes
+            // Include packet_count and protocol_version to help distinguish RadioBridge messages
+            return `${topic}|${devEui}|${time}|${payload}|${packetCount}|${protocolVersion}`;
+        }
+        
+        // Check if message already exists in cache (using fingerprint index)
+        async function messageExists(fingerprint) {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                // Try to use fingerprint index if available, otherwise fall back to scanning
+                let index;
+                try {
+                    index = store.index('fingerprint');
+                } catch (e) {
+                    // Index doesn't exist yet, will be created on next upgrade
+                    resolve(false);
+                    return;
+                }
+                const request = index.get(fingerprint);
+                request.onsuccess = () => {
+                    resolve(request.result !== undefined);
+                };
+                request.onerror = () => {
+                    // If index doesn't exist, assume message doesn't exist
+                    resolve(false);
+                };
+            });
+        }
+        
+        // Store message in IndexedDB (with deduplication)
+        async function cacheMessage(message) {
+            if (!db) await initDB();
+            
+            // Generate fingerprint first
+            const fingerprint = getMessageFingerprint(message);
+            
+            // Check if message already exists using fingerprint index
+            const exists = await messageExists(fingerprint);
+            if (exists) {
+                console.log('[Cache] Duplicate message detected, skipping:', fingerprint.substring(0, 100));
+                return; // Skip duplicate
+            }
+            
+            const devEui = getDevEuiFromMessage(message);
+            const defaultDecoderId = getDefaultDecoderId();
+            
+            // Check if there's a per-device decoder mapping
+            const decoderMap = loadDecoderMap();
+            const selectedDecoderId = (devEui && decoderMap[devEui]) ? decoderMap[devEui] : defaultDecoderId;
+            
+            const decodedResult = decodeMessageWithSelection(message, selectedDecoderId);
+            const dataObj = (message && message.data && typeof message.data === 'object') ? message.data : {};
+            const time = dataObj.current_time || dataObj.time || new Date().toISOString();
+            
+            // Debug logging for Sensative Strips
+            if (selectedDecoderId && (selectedDecoderId.includes('sensative') || selectedDecoderId.includes('strips'))) {
+                const port = message.data?.port;
+                const hasStripsData = decodedResult.decoded && (
+                    (decodedResult.decoded.port === 1 && Array.isArray(decodedResult.decoded.decoded)) ||
+                    decodedResult.decoded.BatteryReport || decodedResult.decoded.TempReport
+                );
+                if (hasStripsData) {
+                    console.log(`[Cache] Caching Sensative Strips sensor data message for ${devEui}, port: ${port}, eventType: ${decodedResult.eventType}`);
+                } else if (decodedResult.eventType === 'downlink_ack' || decodedResult.decoded?.port === 11) {
+                    console.log(`[Cache] Caching Sensative Strips non-sensor message (${decodedResult.eventType || 'port 11'}) for ${devEui}`);
+                }
+            }
+            
+            const messageRecord = {
+                id: Date.now() + Math.random(), // unique ID
+                fingerprint: fingerprint, // for deduplication (unique index)
+                original: message,
+                deveui: devEui || '',
+                time: time,
+                topic: message.topic || '',
+                eventType: decodedResult.eventType || '',
+                decoded: decodedResult.decoded,
+                cachedAt: new Date().toISOString()
+            };
+            
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.add(messageRecord);
+                request.onsuccess = () => {
+                    console.log('[Cache] Message cached successfully:', fingerprint.substring(0, 100));
+                    try {
+                        const ch = new BroadcastChannel('RBT_Uplinks');
+                        ch.postMessage({ type: 'newMessage', deveui: messageRecord.deveui || '' });
+                        ch.close();
+                    } catch (e) { /* BroadcastChannel not supported */ }
+                    resolve();
+                };
+                request.onerror = () => {
+                    // If error is due to duplicate fingerprint (unique constraint), that's okay - skip it
+                    if (request.error.name === 'ConstraintError') {
+                        console.log('[Cache] Duplicate detected on add (ConstraintError), skipping:', fingerprint.substring(0, 100));
+                        resolve(); // Treat as success (duplicate was prevented)
+                    } else {
+                        console.error('[Cache] Error caching message:', request.error, fingerprint.substring(0, 100));
+                        reject(request.error);
+                    }
+                };
+            });
+        }
+        
+        // Get cached messages with filters (limit to most recent 1000 to prevent UI lag)
+        async function getCachedMessages(filters = {}) {
+            if (!db) await initDB();
+            
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const index = store.index('time');
+                const request = index.openCursor(null, 'prev'); // reverse order (newest first)
+                const messages = [];
+                const MAX_MESSAGES = 1000; // Limit to prevent UI lag
+                
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor && messages.length < MAX_MESSAGES) {
+                        const msg = cursor.value;
+                        let include = true;
+                        
+                        // Apply filters
+                        if (filters.search && filters.search.trim()) {
+                            const search = filters.search.toLowerCase();
+                            const searchable = JSON.stringify(msg).toLowerCase();
+                            if (!searchable.includes(search)) include = false;
+                        }
+                        
+                        if (filters.deveui && filters.deveui.trim()) {
+                            if (!msg.deveui || msg.deveui.toLowerCase() !== filters.deveui.toLowerCase()) {
+                                include = false;
+                            }
+                        }
+                        
+                        if (filters.eventType && filters.eventType.trim()) {
+                            if (!msg.eventType || !msg.eventType.toLowerCase().includes(filters.eventType.toLowerCase())) {
+                                include = false;
+                            }
+                        }
+                        
+                        if (filters.dateFrom) {
+                            const msgTime = new Date(msg.time);
+                            const fromTime = new Date(filters.dateFrom);
+                            if (msgTime < fromTime) include = false;
+                        }
+                        
+                        if (filters.dateTo) {
+                            const msgTime = new Date(msg.time);
+                            const toTime = new Date(filters.dateTo);
+                            if (msgTime > toTime) include = false;
+                        }
+                        
+                        if (include) {
+                            messages.push(msg);
+                        }
+                        
+                        cursor.continue();
+                    } else {
+                        resolve(messages);
+                    }
+                };
+                
+                request.onerror = () => reject(request.error);
+            });
+        }
+        
+        // Clear all cached messages
+        async function clearCache() {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.clear();
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+        
+        // Get cache statistics
+        async function getCacheStats() {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.count();
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+        
+        // Update cache stats display
+        async function updateCacheStats() {
+            try {
+                const count = await getCacheStats();
+                const statsEl = document.getElementById('cacheStats');
+                if (statsEl) {
+                    statsEl.textContent = `Cached messages: ${count}`;
+                }
+            } catch (e) {
+                console.error('Failed to get cache stats:', e);
+            }
+        }
+
+        async function getCachedDevEUIs(limit = 500) {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                let index;
+                try {
+                    index = store.index('deveui');
+                } catch (e) {
+                    resolve([]);
+                    return;
+                }
+                const request = index.openCursor();
+                const set = new Set();
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        const v = cursor.value;
+                        const d = v && v.deveui ? String(v.deveui) : '';
+                        if (d) set.add(d);
+                        if (set.size >= limit) {
+                            resolve(Array.from(set).sort());
+                            return;
+                        }
+                        cursor.continue();
+                    } else {
+                        resolve(Array.from(set).sort());
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function refreshDevEuiDropdown(keepSelection = true) {
+            const sel = document.getElementById('filterDevEui');
+            if (!sel) return;
+            const prev = keepSelection ? (sel.value || '') : '';
+            try {
+                const devs = await getCachedDevEUIs();
+                sel.innerHTML = '';
+                const optAll = document.createElement('option');
+                optAll.value = '';
+                optAll.textContent = '-- All devices --';
+                sel.appendChild(optAll);
+                devs.forEach((d) => {
+                    const opt = document.createElement('option');
+                    opt.value = d;
+                    opt.textContent = d;
+                    sel.appendChild(opt);
+                });
+                if (prev) sel.value = prev;
+            } catch (e) {
+                console.warn('DevEUI dropdown refresh failed:', e);
+            }
+        }
+        
+        // Download messages as CSV
+        async function downloadCSV() {
+            try {
+                const filters = getActiveFilters();
+                const messages = await getCachedMessages(filters);
+                
+                if (messages.length === 0) {
+                    alert('No cached messages to download. Connect to MQTT and receive messages first.');
+                    return;
+                }
+                
+                // CSV header
+                const headers = ['Time', 'DevEUI', 'Topic', 'Event Type', 'Message Data'];
+                let csv = headers.join(',') + '\n';
+                
+                messages.forEach(msg => {
+                    const decodedExport = applyTempUnitToDecoded(msg.decoded || {});
+                    const row = [
+                        `"${msg.time || ''}"`,
+                        `"${msg.deveui || ''}"`,
+                        `"${msg.topic || ''}"`,
+                        `"${msg.eventType || ''}"`,
+                        `"${JSON.stringify(decodedExport).replace(/"/g, '""')}"`
+                    ];
+                    csv += row.join(',') + '\n';
+                });
+                
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `uplinks_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Error downloading CSV: ' + e);
+            }
+        }
+        
+        // Download messages as JSON
+        async function downloadJSON() {
+            try {
+                const filters = getActiveFilters();
+                const messages = await getCachedMessages(filters);
+                
+                if (messages.length === 0) {
+                    alert('No cached messages to download. Connect to MQTT and receive messages first.');
+                    return;
+                }
+                
+                const json = JSON.stringify(messages.map(msg => ({
+                    time: msg.time,
+                    deveui: msg.deveui,
+                    topic: msg.topic,
+                    eventType: msg.eventType,
+                    decoded: applyTempUnitToDecoded(msg.decoded),
+                    original: msg.original
+                })), null, 2);
+                
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `uplinks_${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Error downloading JSON: ' + e);
+            }
+        }
+
+        // Normalize an uploaded JSON item (gateway history or our export) to message shape for cacheMessage
+        function normalizeUploadedItemToMessage(item) {
+            if (!item || typeof item !== 'object') return null;
+            // Our download format: { time, deveui, topic, eventType, decoded, original } — original is { type, topic, data }
+            if (item.original && item.original.topic) {
+                const msg = item.original;
+                const data = msg.data && typeof msg.data === 'object' ? msg.data : (msg.payload || {});
+                return { type: msg.type || 'json', topic: msg.topic, data: data };
+            }
+            // Gateway history format: no topic; has deveui, direction, data (base64), created_at/trx_time
+            // Only import uplinks (direction === "up") for the uplinks page
+            if (item.deveui != null && (item.direction === 'up' || item.direction == null) && (item.data != null || item.created_at != null)) {
+                const deveui = String(item.deveui).trim();
+                if (!deveui) return null;
+                const topic = 'lora/' + deveui.replace(/-/g, '') + '/up';
+                const time = item.created_at ?? item.trx_time ?? item.time ?? new Date().toISOString();
+                const data = {
+                    deveui: deveui,
+                    time: time,
+                    current_time: time,
+                    data: typeof item.data === 'string' ? item.data : (item.data || ''),
+                    port: item.port != null ? item.port : undefined,
+                    rssi: item.rssi != null ? item.rssi : undefined,
+                    snr: item.snr != null ? item.snr : undefined,
+                    freq: item.frequency != null ? item.frequency : (item.freq != null ? item.freq : undefined),
+                    dr: item.datarate ?? item.dr,
+                    datarate: item.datarate,
+                    gweui: item.gweui,
+                    dev_addr: item.dev_addr,
+                    tmst: item.tmst
+                };
+                return { type: 'json', topic: topic, data: data };
+            }
+            // Gateway / flat with topic: { topic, data, deveui, time, ... } or { topic, payload, ... }
+            if (item.topic) {
+                const data = item.data && typeof item.data === 'object' ? item.data : {};
+                const flat = {
+                    topic: item.topic,
+                    deveui: item.deveui ?? data.deveui,
+                    time: item.time ?? data.time ?? item.current_time ?? data.current_time ?? item.created_at ?? item.trx_time,
+                    data: item.data ?? data.data ?? item.payload ?? data.payload,
+                    port: item.port ?? data.port,
+                    rssi: item.rssi ?? data.rssi,
+                    snr: item.snr ?? data.snr,
+                    freq: item.freq ?? data.freq ?? item.frequency,
+                    data_decoded: item.data_decoded ?? data.data_decoded
+                };
+                if (typeof item.data === 'string') flat.data = item.data;
+                if (typeof data.data === 'string') flat.data = data.data;
+                return { type: 'json', topic: item.topic, data: flat };
+            }
+            // Single payload object with topic nested
+            if (item.payload && typeof item.payload === 'object' && (item.payload.topic || item.payload.deveui)) {
+                return { type: 'json', topic: item.payload.topic || ('lora/' + (item.payload.deveui || '').replace(/-/g, '') + '/up'), data: item.payload };
+            }
+            return null;
+        }
+
+        async function importHistoryFromFile(file) {
+            if (!file || !file.name) return;
+            try {
+                const text = await new Promise((resolve, reject) => {
+                    const r = new FileReader();
+                    r.onload = () => resolve(r.result);
+                    r.onerror = () => reject(r.error);
+                    r.readAsText(file, 'utf-8');
+                });
+                const parsed = JSON.parse(text);
+                let items = Array.isArray(parsed) ? parsed : [];
+                if (!Array.isArray(parsed) && typeof parsed === 'object') {
+                    if (Array.isArray(parsed.packets)) items = parsed.packets;
+                    else if (Array.isArray(parsed.messages)) items = parsed.messages;
+                    else if (Array.isArray(parsed.history)) items = parsed.history;
+                    else if (Array.isArray(parsed.uplinks)) items = parsed.uplinks;
+                    else items = [parsed];
+                }
+                if (items.length === 0) {
+                    alert('No packets found in file. Expected a JSON array or object with "packets", "messages", or "history".');
+                    return;
+                }
+                const countBefore = await getCacheStats();
+                let skipped = 0;
+                for (const item of items) {
+                    const message = normalizeUploadedItemToMessage(item);
+                    if (!message) { skipped++; continue; }
+                    try {
+                        await cacheMessage(message);
+                    } catch (e) {
+                        console.warn('Import skip message:', e);
+                        skipped++;
+                    }
+                }
+                const countAfter = await getCacheStats();
+                const added = Math.max(0, countAfter - countBefore);
+                await updateCacheStats();
+                await refreshDevEuiDropdown(false);
+                displayCachedMessages(getActiveFilters());
+                const msg = added > 0
+                    ? `Imported ${added} new packet(s) into cache (${items.length} in file).${skipped > 0 ? ` ${skipped} skipped (invalid).` : ''}`
+                    : items.length - skipped > 0
+                        ? `All ${items.length - skipped} packet(s) were duplicates; no new messages added.`
+                        : `No packets imported.${skipped > 0 ? ` ${skipped} skipped (invalid).` : ''}`;
+                if (typeof showNotification === 'function') showNotification(msg);
+                else alert(msg);
+            } catch (e) {
+                console.error('Import history error:', e);
+                alert('Failed to import file: ' + (e.message || e));
+            }
+        }
+
+        // Get active filters from UI
+        function getActiveFilters() {
+            return {
+                search: document.getElementById('filter').value || '',
+                deveui: document.getElementById('filterDevEui').value || '',
+                eventType: document.getElementById('filterEventType').value || '',
+                dateFrom: document.getElementById('filterDateFrom').value || '',
+                dateTo: document.getElementById('filterDateTo').value || ''
+            };
+        }
+
+        function getViewMode() {
+            const el = document.getElementById('viewMode');
+            const v = (el && el.value) ? String(el.value) : (localStorage.getItem(VIEW_MODE_KEY) || 'decoded');
+            return (v === 'raw' || v === 'both' || v === 'decoded') ? v : 'decoded';
+        }
+
+        function setViewMode(mode) {
+            const v = (mode === 'raw' || mode === 'both' || mode === 'decoded') ? mode : 'decoded';
+            localStorage.setItem(VIEW_MODE_KEY, v);
+            const el = document.getElementById('viewMode');
+            if (el) el.value = v;
+        }
+
+        function extractRawInfo(message) {
+            const dataObj = (message && message.data && typeof message.data === 'object') ? message.data : {};
+            let payloadBase64 = '';
+            if (window.RBTDecoders && window.RBTDecoders.helpers && window.RBTDecoders.helpers.extractBase64Payload) {
+                payloadBase64 = window.RBTDecoders.helpers.extractBase64Payload(message) || '';
+            } else if (typeof dataObj.data === 'string') {
+                payloadBase64 = dataObj.data;
+            }
+
+            let payloadHex = '';
+            try {
+                if (window.RBTDecoders && window.RBTDecoders.helpers && window.RBTDecoders.helpers.base64ToBytes && window.RBTDecoders.helpers.bytesToHex) {
+                    const bytes = window.RBTDecoders.helpers.base64ToBytes(payloadBase64);
+                    if (bytes) payloadHex = window.RBTDecoders.helpers.bytesToHex(bytes);
+                }
+            } catch {
+                payloadHex = '';
+            }
+
+            // Port (fPort) best-effort across formats
+            const port =
+                (typeof dataObj.port === 'number' ? dataObj.port :
+                (dataObj.uplink_message && typeof dataObj.uplink_message.f_port === 'number' ? dataObj.uplink_message.f_port :
+                (typeof dataObj.fport === 'number' ? dataObj.fport : null)));
+
+            return {
+                payload_base64: payloadBase64,
+                payload_hex: payloadHex,
+                port: port,
+                rssi: (dataObj && dataObj.rssi !== undefined) ? dataObj.rssi : null,
+                snr: (dataObj && dataObj.snr !== undefined) ? dataObj.snr : null,
+                freq: (dataObj && dataObj.freq !== undefined) ? dataObj.freq : null,
+                dr: (dataObj && dataObj.dr !== undefined) ? dataObj.dr : null,
+            };
+        }
+
+        function renderMessageDataCell(messageDataCell, originalMessage, decodedResult) {
+            const viewMode = getViewMode();
+            const decoded = decodedResult && decodedResult.decoded ? decodedResult.decoded : {};
+            const decodedForDisplay = applyTempUnitToDecoded(decoded);
+            const rawInfo = extractRawInfo(originalMessage);
+
+            messageDataCell.innerHTML = '';
+
+            function addBox(kind, title, obj) {
+                const box = document.createElement('div');
+                box.className = 'data-box ' + kind;
+                const t = document.createElement('div');
+                t.className = 'data-title';
+                t.textContent = title;
+                const pre = document.createElement('pre');
+                pre.className = 'data-pre';
+                pre.textContent = JSON.stringify(obj || {}, null, 2);
+                box.appendChild(t);
+                box.appendChild(pre);
+                messageDataCell.appendChild(box);
+            }
+
+            if (viewMode === 'decoded') {
+                addBox('decoded', 'Decoded', decodedForDisplay);
+            } else if (viewMode === 'raw') {
+                addBox('raw', 'Raw payload', rawInfo);
+            } else {
+                addBox('decoded', 'Decoded', decodedForDisplay);
+                addBox('raw', 'Raw payload', rawInfo);
+            }
+        }
+        
+        // Apply filters and refresh display
+        function applyFilters() {
+            const filters = getActiveFilters();
+            displayCachedMessages(filters);
+        }
+
+        function setDecoderLoadStatus(text, isError = false) {
+            const el = document.getElementById('decoderLoadStatus');
+            if (!el) return;
+            el.textContent = text || '';
+            el.style.color = isError ? '#b71c1c' : '#666';
+        }
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.async = false;
+                s.onload = () => resolve(true);
+                s.onerror = () => reject(new Error(`Failed to load ${src}`));
+                document.head.appendChild(s);
+            });
+        }
+
+        async function loadCustomDecodersOnce(forceReload = false) {
+            if (customDecodersLoaded && !forceReload) return;
+            customDecodersLoaded = true;
+            try {
+                const res = await fetch('/api/decoders/list');
+                const data = await res.json().catch(() => ({}));
+                const files = (data && data.files) ? data.files : [];
+                const report = { total: files.length, loaded: 0, failed: 0, failures: [] };
+
+                if (!res.ok) {
+                    setDecoderLoadStatus(`Custom decoders: failed to list (HTTP ${res.status}).`, true);
+                    lastCustomDecoderLoadReport = report;
+                    return;
+                }
+                // Load in deterministic order
+                for (const f of files) {
+                    if (!f || !f.url) continue;
+                    // cache-bust so updates show immediately
+                    const v = (f.mtime !== undefined && f.mtime !== null) ? String(f.mtime) : String(Date.now());
+                    try {
+                        await loadScript(`${f.url}?v=${encodeURIComponent(v)}`);
+                        report.loaded += 1;
+                    } catch (e) {
+                        report.failed += 1;
+                        report.failures.push({ name: f.name || f.url, error: String(e) });
+                        // Continue loading remaining decoders even if one fails
+                        console.warn('Custom decoder load error:', f, e);
+                    }
+                }
+
+                lastCustomDecoderLoadReport = report;
+                const registered = (window.RBTDecoders && window.RBTDecoders.listDecoders) ? window.RBTDecoders.listDecoders().length : 0;
+                if (report.total === 0) {
+                    setDecoderLoadStatus(`Custom decoders: none installed. Registered decoders: ${registered}.`);
+                } else if (report.failed > 0) {
+                    setDecoderLoadStatus(`Custom decoders: ${report.loaded}/${report.total} loaded, ${report.failed} failed. Registered decoders: ${registered}. (Check browser console for errors)`, true);
+                } else {
+                    setDecoderLoadStatus(`Custom decoders: ${report.loaded}/${report.total} loaded. Registered decoders: ${registered}.`);
+                }
+            } catch (e) {
+                // Don't break the page if custom decoders can't load
+                console.warn('Custom decoder load failed:', e);
+                setDecoderLoadStatus(`Custom decoders: load failed (${String(e)}).`, true);
+            }
+        }
+
+        function loadDecoderMap() {
+            try {
+                return JSON.parse(localStorage.getItem(DECODER_MAP_KEY) || '{}') || {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function saveDecoderMap(map) {
+            localStorage.setItem(DECODER_MAP_KEY, JSON.stringify(map || {}));
+        }
+
+        function getDefaultDecoderId() {
+            return localStorage.getItem(DEFAULT_DECODER_KEY) || 'auto';
+        }
+
+        function setDefaultDecoderId(id) {
+            localStorage.setItem(DEFAULT_DECODER_KEY, id || 'auto');
+        }
+
+        function getDevEuiFromMessage(message) {
+            if (window.RBTDecoders && window.RBTDecoders.helpers) {
+                return window.RBTDecoders.helpers.extractDevEui(message);
+            }
+            return (message && message.data && message.data.deveui) ? message.data.deveui : null;
+        }
+
+        function listDecoderOptions() {
+            if (!window.RBTDecoders) return [];
+            return window.RBTDecoders.listDecoders();
+        }
+
+        function fillDecoderSelect(selectEl, selectedId) {
+            const decoders = listDecoderOptions();
+            selectEl.innerHTML = '';
+
+            const autoOpt = document.createElement('option');
+            autoOpt.value = 'auto';
+            autoOpt.textContent = 'Auto';
+            selectEl.appendChild(autoOpt);
+
+            decoders.forEach((d) => {
+                const opt = document.createElement('option');
+                opt.value = d.id;
+                opt.textContent = d.name;
+                selectEl.appendChild(opt);
+            });
+
+            selectEl.value = selectedId || 'auto';
+        }
+
+        function ensureDecoderUI(forceRefresh = false) {
+            const defaultSelect = document.getElementById('defaultDecoder');
+            if (defaultSelect) {
+                const shouldInit = !defaultSelect.dataset.initialized;
+                if (shouldInit) {
+                    defaultSelect.dataset.initialized = '1';
+                }
+
+                // Always refresh options if requested, or on first init
+                if (forceRefresh || shouldInit) {
+                    const current = defaultSelect.value || getDefaultDecoderId();
+                    fillDecoderSelect(defaultSelect, current);
+                }
+
+                if (shouldInit) {
+                defaultSelect.addEventListener('change', function () {
+                    setDefaultDecoderId(this.value || 'auto');
+                    fetchMessages(document.getElementById('filter').value);
+                });
+                }
+            }
+
+            const clearBtn = document.getElementById('clearDecoderMap');
+            if (clearBtn && !clearBtn.dataset.initialized) {
+                clearBtn.dataset.initialized = '1';
+                clearBtn.addEventListener('click', function () {
+                    saveDecoderMap({});
+                    fetchMessages(document.getElementById('filter').value);
+                });
+            }
+
+            const reloadBtn = document.getElementById('reloadDecoders');
+            if (reloadBtn && !reloadBtn.dataset.initialized) {
+                reloadBtn.dataset.initialized = '1';
+                reloadBtn.addEventListener('click', async function () {
+                    // Allow picking up newly-added decoders without a full page refresh
+                    customDecodersLoaded = false;
+                    setDecoderLoadStatus('Reloading decoders…');
+                    await loadCustomDecodersOnce(true);
+                    ensureDecoderUI(true);
+                    fetchMessages(document.getElementById('filter').value);
+                });
+            }
+        }
+
+        function decodeMessageWithSelection(message, decoderId) {
+            if (!window.RBTDecoders) {
+                return { eventType: 'no_decoder_registry', decoded: message && message.data ? message.data : message };
+            }
+
+            try {
+                let decoder = null;
+                if (!decoderId || decoderId === 'auto') {
+                    decoder = window.RBTDecoders.pickAutoDecoder(message);
+                } else {
+                    decoder = window.RBTDecoders.getDecoder(decoderId);
+                }
+
+                // Ensure we always have a fallback
+                if (!decoder) decoder = window.RBTDecoders.getDecoder('raw');
+                if (!decoder) return { eventType: 'no_decoder', decoded: message && message.data ? message.data : message };
+
+                const out = decoder.decode(message);
+                return window.RBTDecoders.normalizeDecodedOutput(out);
+            } catch (e) {
+                return { eventType: 'decode_error', decoded: { error: String(e && e.message ? e.message : e) } };
+            }
+        }
+
+        // Initialize IndexedDB and set up event listeners on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Initialize IndexedDB
+            try {
+                await initDB();
+                
+                // Run duplicate removal on first load (only once per session)
+                const duplicateCleanupDone = sessionStorage.getItem('duplicateCleanupDone');
+                if (!duplicateCleanupDone) {
+                    try {
+                        const removed = await removeDuplicates();
+                        if (removed > 0) {
+                            console.log(`[Cache] Removed ${removed} duplicate messages on initialization`);
+                            showNotification(`Removed ${removed} duplicate messages from cache`);
+                        }
+                        sessionStorage.setItem('duplicateCleanupDone', 'true');
+                    } catch (e) {
+                        console.warn('[Cache] Error removing duplicates on init:', e);
+                    }
+                }
+
+                // Backfill from server persistent cache (packets received while browser was closed)
+                try {
+                    const res = await fetch('/api/uplinks/persistent-cache?limit=5000');
+                    const data = await res.json().catch(function () { return { messages: [] }; });
+                    if (data.messages && data.messages.length > 0) {
+                        let merged = 0;
+                        for (let i = 0; i < data.messages.length; i++) {
+                            const m = data.messages[i];
+                            const original = { type: m.type, topic: m.topic, data: m.data || m };
+                            try {
+                                await cacheMessage(original);
+                                merged++;
+                            } catch (e) { /* dedupe or error */ }
+                        }
+                        if (merged > 0) {
+                            console.log('[Cache] Merged ' + merged + ' messages from server persistent cache');
+                            await updateCacheStats();
+                            refreshDevEuiDropdown(true);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Cache] Could not backfill from persistent cache:', e);
+                }
+                
+                await updateCacheStats();
+                // Load cached messages on page load
+                displayCachedMessages(getActiveFilters());
+                refreshDevEuiDropdown(true);
+            } catch (e) {
+                console.error('Failed to initialize IndexedDB:', e);
+            }
+            
+            // Load custom decoders
+            loadCustomDecodersOnce().then(() => ensureDecoderUI(true));
+            
+            // Set up filter event listeners
+            document.getElementById('filter').addEventListener('keyup', () => applyFilters());
+            document.getElementById('filterDevEui').addEventListener('change', () => applyFilters());
+            document.getElementById('filterEventType').addEventListener('input', () => applyFilters());
+            document.getElementById('filterDateFrom').addEventListener('change', () => applyFilters());
+            document.getElementById('filterDateTo').addEventListener('change', () => applyFilters());
+
+                // View mode (decoded/raw/both)
+                const viewModeEl = document.getElementById('viewMode');
+                if (viewModeEl) {
+                    const saved = localStorage.getItem(VIEW_MODE_KEY) || 'decoded';
+                    setViewMode(saved);
+                    viewModeEl.addEventListener('change', () => {
+                        setViewMode(viewModeEl.value);
+                        applyFilters();
+                    });
+                }
+            
+            // Set up download buttons
+            document.getElementById('downloadCSVBtn').addEventListener('click', downloadCSV);
+            document.getElementById('downloadJSONBtn').addEventListener('click', downloadJSON);
+
+            var tempUnitRadios = document.querySelectorAll('input[name="tempUnitUplinks"]');
+            var currentTempUnit = getTempUnit();
+            tempUnitRadios.forEach(function (r) {
+                if (r.value === currentTempUnit) r.checked = true;
+                r.addEventListener('change', function () {
+                    if (!this.checked) return;
+                    setTempUnit(this.value);
+                    applyFilters();
+                });
+            });
+
+            // Import history: button opens file picker; on file chosen, import and refresh
+            const uploadHistoryBtn = document.getElementById('uploadHistoryBtn');
+            const uploadHistoryInput = document.getElementById('uploadHistoryInput');
+            if (uploadHistoryBtn && uploadHistoryInput) {
+                uploadHistoryBtn.addEventListener('click', () => uploadHistoryInput.click());
+                uploadHistoryInput.addEventListener('change', function () {
+                    const file = this.files && this.files[0];
+                    if (file) {
+                        importHistoryFromFile(file);
+                        this.value = '';
+                    }
+                });
+            }
+
+            // Set up clear cache button
+            document.getElementById('clearCacheBtn').addEventListener('click', async () => {
+                if (confirm('Clear all cached messages? This will remove local cache and server-side uplink history.')) {
+                    try {
+                        // Clear browser IndexedDB cache
+                        await clearCache();
+                        // Also clear server-side persistent uplink cache
+                        try {
+                            const res = await fetch('/api/uplinks/persistent-cache/clear', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok || data.success === false) {
+                                console.warn('Server persistent cache clear failed:', data && data.message);
+                            }
+                        } catch (err) {
+                            console.warn('Error clearing server persistent cache:', err);
+                        }
+                        await updateCacheStats();
+                        displayCachedMessages(getActiveFilters());
+                        await refreshDevEuiDropdown(false);
+                        alert('Cache cleared successfully.');
+                    } catch (e) {
+                        alert('Error clearing cache: ' + e);
+                    }
+                }
+            });
+
+            // Wire up connect form submit handler here so we are guaranteed
+            // to use the overridden connectToBroker implementation defined below.
+            const connectForm = document.getElementById('connectForm');
+            if (connectForm) {
+                connectForm.addEventListener('submit', (event) => {
+                    // Always prevent default form submission; let JS handle connect logic
+                    event.preventDefault();
+                    connectToBroker(event);
+                });
+            }
+        });
+
+        // Display cached messages with filtering
+        async function displayCachedMessages(filters = {}) {
+            try {
+                const messages = await getCachedMessages(filters);
+                const messageTable = document.getElementById('messageTableBody');
+                messageTable.innerHTML = '';
+                
+                if (messages.length === 0) {
+                    messageTable.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">No cached messages found (matching filters)</td></tr>';
+                    updateCacheStats();
+                    return;
+                }
+                
+                // Render messages (similar to fetchMessages logic)
+                messages.forEach((msg) => {
+                    const row = document.createElement('tr');
+                    const timeCell = document.createElement('td');
+                    const devEUICell = document.createElement('td');
+                    const topicCell = document.createElement('td');
+                    const messageTypeCell = document.createElement('td');
+                    const messageDataCell = document.createElement('td');
+                    const buttonCell = document.createElement('td');
+                    const moreInfoButton = document.createElement('button');
+                    moreInfoButton.className = 'action-button';
+                    buttonCell.style.textAlign = 'center';
+                    
+                    timeCell.textContent = msg.time || 'N/A';
+                    timeCell.style.textAlign = 'center';
+                    
+                    devEUICell.textContent = msg.deveui || 'N/A';
+                    devEUICell.style.textAlign = 'center';
+                    
+                    topicCell.textContent = msg.topic.substring(msg.topic.lastIndexOf('/') + 1);
+                    topicCell.style.textAlign = 'center';
+                    
+                    // Re-decode with current decoder selection (don't use cached decoded result)
+                    const decoderMap = loadDecoderMap();
+                    const defaultDecoderId = getDefaultDecoderId();
+                    const selectedDecoderId = (msg.deveui && decoderMap[msg.deveui]) ? decoderMap[msg.deveui] : defaultDecoderId;
+                    
+                    // Re-decode the original message with the selected decoder
+                    const decodedResult = decodeMessageWithSelection(msg.original, selectedDecoderId);
+                    
+                    messageTypeCell.textContent = decodedResult.eventType || 'N/A';
+                    messageTypeCell.style.textAlign = 'center';
+                    renderMessageDataCell(messageDataCell, msg.original, decodedResult);
+                    messageDataCell.style.textAlign = 'left';
+                    
+                    // Actions: per-row decoder select + Full JSON
+                    const actionsWrap = document.createElement('div');
+                    actionsWrap.className = 'actions-wrap';
+                    
+                    const rowDecoderSelect = document.createElement('select');
+                    rowDecoderSelect.className = 'decoder-select';
+                    fillDecoderSelect(rowDecoderSelect, selectedDecoderId || 'auto');
+                    rowDecoderSelect.title = msg.deveui ? `Decoder for ${msg.deveui}` : 'Decoder (no DevEUI found)';
+                    
+                    rowDecoderSelect.addEventListener('change', function () {
+                        const val = this.value || 'auto';
+                        const map = loadDecoderMap();
+                        if (msg.deveui) {
+                            if (val === 'auto') {
+                                delete map[msg.deveui];
+                            } else {
+                                map[msg.deveui] = val;
+                            }
+                            saveDecoderMap(map);
+                        } else {
+                            setDefaultDecoderId(val);
+                            const defaultSelect = document.getElementById('defaultDecoder');
+                            if (defaultSelect) defaultSelect.value = val;
+                        }
+                        applyFilters(); // Refresh display with new decoder
+                    });
+                    
+                    moreInfoButton.textContent = 'Raw JSON';
+                    moreInfoButton.onclick = () => showModal(msg.original.data || msg.original);
+                    
+                    actionsWrap.appendChild(rowDecoderSelect);
+                    actionsWrap.appendChild(moreInfoButton);
+                    buttonCell.appendChild(actionsWrap);
+                    
+                    row.appendChild(timeCell);
+                    row.appendChild(devEUICell);
+                    row.appendChild(topicCell);
+                    row.appendChild(messageTypeCell);
+                    row.appendChild(messageDataCell);
+                    row.appendChild(buttonCell);
+                    messageTable.appendChild(row);
+                });
+                
+                updateCacheStats();
+            } catch (e) {
+                console.error('Error displaying cached messages:', e);
+                const messageTable = document.getElementById('messageTableBody');
+                messageTable.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">Error loading cached messages</td></tr>';
+            }
+        }
+        
+        fetchMessages = function(filter = '') {
+            // Load custom decoders first so dropdown includes them
+            loadCustomDecodersOnce().then(() => {
+                ensureDecoderUI(true);
+                fetch(`/messages?filter=${encodeURIComponent(filter)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Don't clear the table here - let displayCachedMessages handle it
+                        // This way cached messages remain visible even if no new messages arrive
+
+                        if (!data.messages) {
+                            // Error loading messages - just show cached ones
+                            console.warn('Error loading messages from server, showing cached messages');
+                            const filters = getActiveFilters();
+                            filters.search = filter || filters.search;
+                            displayCachedMessages(filters);
+                            return;
+                        }
+
+                        if (data.messages && data.messages.length > 0) {
+                            // We have new messages - cache them
+                            data.messages.reverse();
+                            // Cache all new messages (with deduplication)
+                            const cachePromises = data.messages.map(message => cacheMessage(message).catch(e => {
+                                console.warn('Failed to cache message:', e);
+                            }));
+                            Promise.all(cachePromises).then(() => {
+                                // Update cache stats after caching
+                                updateCacheStats();
+                                refreshDevEuiDropdown(true);
+                                // Refresh display to show new messages
+                                const filters = getActiveFilters();
+                                filters.search = filter || filters.search;
+                                displayCachedMessages(filters);
+                            });
+                            // Always forward each new message with current Uplinks decoder to cloud integrations
+                            (function () {
+                                const defaultDecoderId = getDefaultDecoderId();
+                                const decoderMap = loadDecoderMap();
+                                data.messages.forEach(function (message) {
+                                    const fp = getMessageFingerprint(message);
+                                    if (forwardedFingerprints.has(fp)) return;
+                                    const deveui = getDevEuiFromMessage(message);
+                                    const selectedDecoderId = (deveui && decoderMap[deveui]) ? decoderMap[deveui] : defaultDecoderId;
+                                    const decodedResult = decodeMessageWithSelection(message, selectedDecoderId);
+                                    const payload = {
+                                        topic: message.topic || '',
+                                        data: message.data || {},
+                                        decoded: applyTempUnitToDecoded(decodedResult && decodedResult.decoded),
+                                        deveui: deveui || null,
+                                        time: (message.data && (message.data.current_time || message.data.time)) || new Date().toISOString()
+                                    };
+                                    fetch('/api/cloud/forward-message', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(payload)
+                                    }).then(function () {
+                                        forwardedFingerprints.add(fp);
+                                        if (forwardedFingerprints.size > MAX_FORWARDED_FINGERPRINTS) {
+                                            const arr = Array.from(forwardedFingerprints);
+                                            forwardedFingerprints = new Set(arr.slice(-MAX_FORWARDED_FINGERPRINTS));
+                                        }
+                                    }).catch(function () {});
+                                });
+                            })();
+                        } else {
+                            // No new messages from server, but show cached ones
+                            const filters = getActiveFilters();
+                            filters.search = filter || filters.search;
+                            displayCachedMessages(filters);
+                        }
+                        // Always return after handling
+                        return;
+                    })
+                    .catch(error => {
+                        // Network error or other fetch failure - show cached messages
+                        console.warn('Failed to fetch messages from server:', error);
+                        const filters = getActiveFilters();
+                        filters.search = filter || filters.search;
+                        displayCachedMessages(filters);
+                    });
+            });
+        };
+
+        // Override connectToBroker to update status and save to localStorage
+        const originalConnectToBroker = connectToBroker;
+        connectToBroker = function(event) {
+            if (event) {
+                event.preventDefault();
+            }
+            const broker = document.getElementById('broker').value;
+            const port = document.getElementById('port').value;
+            const topic = document.getElementById('topic').value;
+
+            // Save to localStorage
+            localStorage.setItem('broker', broker);
+            localStorage.setItem('port', port);
+            localStorage.setItem('topic', topic);
+
+            fetch('/connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({broker, port, topic})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        showNotification(data.message);
+                        updateConnectionStatus(true);
+                        startFetchingMessages();
+                    } else {
+                        updateConnectionStatus(false);
+                        alert('Failed to connect to the broker');
+                    }
+                })
+                .catch(error => {
+                    updateConnectionStatus(false);
+                    alert('Error: ' + error);
+                });
+        };
+
+        // Function to show notification
+        function showNotification(message) {
+            const notificationDiv = document.getElementById('notification');
+            if (notificationDiv) {
+                notificationDiv.textContent = message;
+                notificationDiv.style.display = 'block';
+
+                // Automatically fade out after 3 seconds
+                setTimeout(() => {
+                    notificationDiv.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
+        // Function to update connection status indicator
+        function updateConnectionStatus(connected) {
+            const connectionStatusEl = document.getElementById('connectionStatus');
+            if (!connectionStatusEl) {
+                console.warn('Connection status element not found');
+                return;
+            }
+            
+            // Find the status indicator (first span with class status-indicator)
+            const statusIndicator = connectionStatusEl.querySelector('.status-indicator');
+            if (statusIndicator) {
+                statusIndicator.className = connected 
+                    ? 'status-indicator status-connected' 
+                    : 'status-indicator status-disconnected';
+            } else {
+                console.warn('Status indicator element not found');
+            }
+            
+            // Find the text span (all spans, get the one that's not the indicator)
+            const allSpans = connectionStatusEl.querySelectorAll('span');
+            for (let span of allSpans) {
+                if (!span.classList.contains('status-indicator')) {
+                    span.textContent = connected ? 'Connected' : 'Disconnected';
+                    break;
+                }
+            }
+        }
+
+        // Function to start fetching messages periodically
+        function startFetchingMessages() {
+            // Clear any existing interval
+            if (window.messageFetchInterval) {
+                clearInterval(window.messageFetchInterval);
+            }
+            // Fetch immediately
+            fetchMessages(document.getElementById('filter').value);
+            // Then fetch every 5 seconds
+            window.messageFetchInterval = setInterval(() => {
+                fetchMessages(document.getElementById('filter').value);
+            }, 5000);
+        }
+
+        // Load saved connection settings and auto-connect (part of DOMContentLoaded above)
+        // Auto-connect if settings are saved - this runs after DOM is ready
+        setTimeout(function() {
+            const savedBroker = localStorage.getItem('broker');
+            const savedPort = localStorage.getItem('port');
+            const savedTopic = localStorage.getItem('topic');
+
+            if (savedBroker && savedPort && savedTopic) {
+                const brokerEl = document.getElementById('broker');
+                const portEl = document.getElementById('port');
+                const topicEl = document.getElementById('topic');
+                
+                if (brokerEl) brokerEl.value = savedBroker;
+                if (portEl) portEl.value = savedPort;
+                if (topicEl) topicEl.value = savedTopic;
+                
+                // Auto-connect if settings are saved
+                setTimeout(() => {
+                    connectToBroker();
+                }, 500);
+            }
+        }, 100);
+
+        // Event listener for filter input
+        document.getElementById('filter').addEventListener('input', function() {
+            fetchMessages(this.value);
+        });
+
+        // Event listener for modal close
+        document.querySelector('.close').addEventListener('click', closeModal);
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (event) => {
+            const modal = document.getElementById('myModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

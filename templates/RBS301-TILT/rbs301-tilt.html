@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadioBridge Tilt Sensor Configuration</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=1">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="../MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>RadioBridge Tilt Sensor Configuration</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="../index.html">Home</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
+                    <a href="../uplinks.html">Uplinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/bar-chart.svg" width="24" height="24" class="icon-margin" alt="Sensors">
+                    <a href="../sensors.html">Sensors</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
+                    <a href="../downlinks.html">Send Downlinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
+                    <a href="../decoders.html">Decoders</a>
+                </li>
+                <li class="item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <a href="../cloud_integrations.html">Cloud Integrations</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
+                    <a href="../radiobridge.html">RadioBridge Config</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2026 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <img src="rbs301-tilt.png" alt="RBS301 Tilt Sensor" class="sensor-image" style="max-width: 200px; margin-bottom: 20px;">
+
+
+    <!-- =========================== -->
+    <!-- TILT ACCESS SETTINGS        -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Tilt Axis Settings</h3>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label" for="tiltAxisWidth">Tilt Axis Width/Length:</label>
+                <select id="tiltAxisWidth" class="input-wide">
+                    <option value="0">Tilt Around Sensor Width</option>
+                    <option value="1">Tilt Around Sensor Length</option>
+                </select>
+            </div>
+            <button id="about-axis-button" class="help-button">?</button>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- ENABLE/DISABLE TILTS        -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="enableTransitionsVertical">
+                    Enable transitions to vertical orientation
+                </label>
+            </div>
+        </div>
+
+        <div class="row" id="angleVerticalRow" style="display: none; margin-left: 25px;">
+            <div class="column">
+                <label class="inline-label" for="angleVerticalSelect">Angle for transition to vertical state in degrees:</label>
+                <select id="angleVerticalSelect" class="input-medium">
+                    <option value="05">5 Degrees</option>
+                    <option value="0A">10 Degrees</option>
+                    <option value="0F">15 Degrees</option>
+                    <option value="14">20 Degrees</option>
+                    <option value="19">25 Degrees</option>
+                    <option value="1E">30 Degrees</option>
+                    <option value="23">35 Degrees</option>
+                    <option value="28">40 Degrees</option>
+                    <option value="2D">45 Degrees</option>
+                    <option value="32">50 Degrees</option>
+                    <option value="37">55 Degrees</option>
+                    <option value="3C">60 Degrees</option>
+                    <option value="41">65 Degrees</option>
+                    <option value="46">70 Degrees</option>
+                    <option value="4B">75 Degrees</option>
+                    <option value="50">80 Degrees</option>
+                    <option value="55">85 Degrees</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="enableTransitionsHorizontal">
+                    Enable transitions to horizontal orientation
+                </label>
+            </div>
+        </div>
+
+        <div class="row" id="angleHorizontalRow" style="display: none; margin-left: 25px;">
+            <div class="column">
+                <label class="inline-label" for="angleHorizontalSelect">Angle for transition to horizontal state in degrees:</label>
+                <select id="angleHorizontalSelect" class="input-medium">
+                    <option value="05">5 Degrees</option>
+                    <option value="0A">10 Degrees</option>
+                    <option value="0F">15 Degrees</option>
+                    <option value="14">20 Degrees</option>
+                    <option value="19">25 Degrees</option>
+                    <option value="1E">30 Degrees</option>
+                    <option value="23">35 Degrees</option>
+                    <option value="28">40 Degrees</option>
+                    <option value="2D">45 Degrees</option>
+                    <option value="32">50 Degrees</option>
+                    <option value="37">55 Degrees</option>
+                    <option value="3C">60 Degrees</option>
+                    <option value="41">65 Degrees</option>
+                    <option value="46">70 Degrees</option>
+                    <option value="4B">75 Degrees</option>
+                    <option value="50">80 Degrees</option>
+                    <option value="55">85 Degrees</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="enableRocHorizontal">
+                    Enable report-on-change toward horizontal
+                </label>
+            </div>
+        </div>
+
+        <div class="row" id="rocHorizontalRow" style="display: none; margin-left: 25px;">
+            <div class="column">
+                <label class="inline-label" for="rocHorizontalSelect">Report-on-change toward horizontal:</label>
+                <select id="rocHorizontalSelect" class="input-medium">
+                    <option value="0A">10 Degrees</option>
+                    <option value="14">20 Degrees</option>
+                    <option value="1E">30 Degrees</option>
+                    <option value="28">40 Degrees</option>
+                    <option value="32">50 Degrees</option>
+                    <option value="3C">60 Degrees</option>
+                    <option value="46">70 Degrees</option>
+                    <option value="50">80 Degrees</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label">
+                    <input type="checkbox" id="enableRocVertical">
+                    Enable report-on-change toward vertical
+                </label>
+            </div>
+        </div>
+
+        <div class="row" id="rocVerticalRow" style="display: none; margin-left: 25px;">
+            <div class="column">
+                <label class="inline-label" for="rocVerticalSelect">Report-on-change toward vertical:</label>
+                <select id="rocVerticalSelect" class="input-medium">
+                    <option value="0A">10 Degrees</option>
+                    <option value="14">20 Degrees</option>
+                    <option value="1E">30 Degrees</option>
+                    <option value="28">40 Degrees</option>
+                    <option value="32">50 Degrees</option>
+                    <option value="3C">60 Degrees</option>
+                    <option value="46">70 Degrees</option>
+                    <option value="50">80 Degrees</option>
+                </select>
+            </div>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- HOLD TIMES                  -->
+    <!-- =========================== -->
+    <section class="section">
+
+        <h3 class="section-title">Hold Times</h3>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label" for="verticalHoldTime">Vertical Hold Time:</label>
+                <select id="verticalHoldTime" class="input-medium">
+                    <option value="00">0 Seconds</option>
+                    <option value="01">0.25 Seconds</option>
+                    <option value="02">0.5 Seconds</option>
+                    <option value="04">1 Second</option>
+                    <option value="08">2 Seconds</option>
+                    <option value="0C">3 Seconds</option>
+                    <option value="10">4 Seconds</option>
+                    <option value="14">5 Seconds</option>
+                    <option value="28">10 Seconds</option>
+                    <option value="78">30 Seconds</option>
+                    <option value="F0">1 Minute</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label class="inline-label" for="horizontalHoldTime">Horizontal Hold Time:</label>
+                <select id="horizontalHoldTime" class="input-medium">
+                    <option value="00">0 Seconds</option>
+                    <option value="01">0.25 Seconds</option>
+                    <option value="02">0.5 Seconds</option>
+                    <option value="04">1 Second</option>
+                    <option value="08">2 Seconds</option>
+                    <option value="0C">3 Seconds</option>
+                    <option value="10">4 Seconds</option>
+                    <option value="14">5 Seconds</option>
+                    <option value="28">10 Seconds</option>
+                    <option value="78">30 Seconds</option>
+                    <option value="F0">1 Minute</option>
+                </select>
+            </div>
+            <button id="about-holdtime-button" class="help-button">?</button>
+        </div>
+
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATED HEX SECTION       -->
+    <!-- =========================== -->
+    <section id="hex-section" class="section" style="display:none;">
+        <div class="row">
+            <h3 class="inline-title">Generated Hexcode:</h3>
+            <span id="hex-output" class="hex-display"></span>
+        </div>
+
+        <button id="copy-button" class="action-button">Copy Hexcode</button>
+        <button id="how-button" class="action-button">How to Use Hexcode</button>
+        <button id="schedule-button" class="action-button" style="background-color: #2196f3; color: white;">Schedule Downlink</button>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATE BUTTON             -->
+    <!-- =========================== -->
+    <button id="generate-button" class="generate-button">
+        Generate Hexcode
+    </button>
+
+
+        </div>
+    </section>
+
+    <script src="js/script.js?v=2"></script>
+</body>
+</html>

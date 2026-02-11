@@ -8,9 +8,11 @@ This will serve all of the HTML pages for configuring RadioBridge sensors.
 Importing the required libraries.
 """
 
+# app_paths is at repo root and adds static/py to path when imported
 try:
-    from flask import Flask, send_from_directory, send_file, jsonify, request, redirect
+    from flask import Flask, send_from_directory, send_file, jsonify, request, redirect, session, url_for
     from werkzeug.utils import secure_filename
+    from werkzeug.middleware.proxy_fix import ProxyFix
 except ImportError as e:
     import sys
     print("ERROR: Flask or its dependencies are not installed.", file=sys.stderr)
@@ -24,14 +26,17 @@ import io
 import json
 import logging
 import os
+import socket
 import threading
 import time
 import argparse
 import urllib.request
 import urllib.error
+from urllib.parse import quote
 import ssl
 import base64
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 from app_paths import get_app_root, get_custom_decoders_dir
 
@@ -39,11 +44,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 APP_ROOT = get_app_root()
+TEMPLATES_DIR = os.path.join(APP_ROOT, "templates")
+STATIC_DIR = os.path.join(APP_ROOT, "static")
 
 """
 Creating the Flask app and setting the template and static directories.
 """
-app = Flask(__name__, static_folder=APP_ROOT, static_url_path='')
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
+# Trust X-Forwarded-Proto/For when behind a reverse proxy (nginx, etc.) so HTTPS works
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+# Secret key for session management (can be overridden via env)
+app.secret_key = os.environ.get("SENSOR_TOOLKIT_SECRET", "sensor-toolkit-change-me")
+# Allow session cookie on both HTTP and HTTPS (don't require Secure flag)
+app.config["SESSION_COOKIE_SECURE"] = False
 
 # Custom decoder storage (served as static files)
 CUSTOM_DECODER_DIR = get_custom_decoders_dir()
@@ -65,6 +78,16 @@ def _decoder_file_url(filename: str) -> str:
     # Always serve via explicit route so custom decoders can live in a writable directory.
     return f"/decoders/custom/{filename}"
 
+
+@app.route('/static/<path:filename>')
+def legacy_static(filename):
+    """Serve static assets for legacy login page from network-dashboard-v0.0.8/static."""
+    if '..' in filename or filename.startswith('/'):
+        return "Invalid path", 403
+    legacy_static_dir = os.path.join(APP_ROOT, "network-dashboard-v0.0.8", "static")
+    return send_from_directory(legacy_static_dir, filename)
+
+
 # Try to import MQTT utilities - gracefully handle if paho-mqtt isn't installed
 try:
     from mqtt_utils_rbt import (
@@ -81,24 +104,27 @@ try:
 except ImportError as e:
     logger.warning(f"MQTT utilities not available: {e}. MQTT features will be disabled.")
     MQTT_AVAILABLE = False
-    
-    # Define stub functions so routes don't fail
-    def connect_to_broker(broker, port, topic):
-        return {"error": "MQTT not available. Please install paho-mqtt."}, 500
-    
-    def get_sensors():
-        return {"sensors": []}
-    
-    def get_messages():
+
+    # Stub functions so routes don't fail (match real module signatures)
+    def connect_to_broker(broker="localhost", port=1883, topic="lora/+/up"):  # type: ignore[no-redef]
+        return None
+
+    def get_sensors():  # type: ignore[no-redef]
         return []
-    
-    def send_downlink(data, broker_ip):
-        return {"error": "MQTT not available. Please install paho-mqtt."}, 500
-    
-    def read_persistent_uplink_cache(limit=0):
+
+    def get_messages():  # type: ignore[no-redef]
         return []
-    
-    def clear_persistent_uplink_cache():
+
+    def send_downlink(data, broker_ip=None):  # type: ignore[no-redef]
+        return {"error": "MQTT not available. Please install paho-mqtt."}
+
+    def get_broker_config() -> Optional[Dict[str, Any]]:
+        return None
+
+    def read_persistent_uplink_cache(limit=0):  # type: ignore[no-redef]
+        return []
+
+    def clear_persistent_uplink_cache() -> bool:
         return False
 
 # Configuration
@@ -116,6 +142,55 @@ def _gateway_base_url(broker):
     return "http://" + host
 
 
+def authenticate_user(username: str, password: str, gateway_ip: str):
+    """
+    Authenticate against the gateway's HTTPS /api/login endpoint.
+
+    Returns (ok: bool, error: Optional[str]).
+    """
+    username = (username or "").strip()
+    password = password or ""
+    gateway_ip = (gateway_ip or "").strip()
+    if not username or not password or not gateway_ip:
+        return False, "Missing username, password, or gateway IP"
+
+    url = f"https://{gateway_ip}/api/login"
+    payload = json.dumps({"username": username, "password": password}).encode("utf-8")
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            data = json.loads(body) if body.strip() else {}
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+            data = json.loads(body) if body.strip() else {}
+        except Exception:
+            data = {}
+        msg = data.get("error") or f"HTTP {e.code}"
+        logger.warning(f"Gateway login HTTPError: {msg}")
+        return False, msg
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Gateway login failed: {e}")
+        return False, str(e)
+
+    status = data.get("status")
+    code = data.get("code")
+    if (isinstance(status, str) and status.lower() == "success") or code == 200:
+        return True, None
+    return False, data.get("error") or status or "Login failed"
+
+
 def load_config(config_file):
     """Load configuration from JSON file if it exists."""
     global config
@@ -131,16 +206,77 @@ def load_config(config_file):
         logger.info(f"Config file {config_file} not found, using defaults")
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page and API.
+
+    POST expects JSON: {"username": "...", "password": "...", "ip": "<gateway ip>"}.
+    Authenticates against the gateway /api/login endpoint.
+    """
+    if request.method == 'POST':
+        # Accept both JSON (Ajax) and form data (HTML form submit)
+        if request.is_json:
+            data = request.get_json(force=True, silent=True) or {}
+        else:
+            data = request.form
+        username = (data.get('username') or '').strip()
+        password = data.get('password') or ''
+        # IP from client, or fall back to host part of request
+        ip = data.get('ip') or request.host.split(':', 1)[0]
+        ok, err = authenticate_user(username, password, ip)
+        if ok:
+            session['username'] = username or 'user'
+            if request.is_json:
+                return jsonify({'status': 'ok', 'redirect': url_for('index')}), 200
+            return redirect(url_for('index'))
+        err_msg = err or 'Invalid credentials'
+        if request.is_json:
+            return jsonify({'status': 'failed', 'error': err_msg}), 401
+        return redirect(url_for('login') + '?error=' + quote(err_msg))
+
+    # GET: if already logged in, go home; otherwise show login page
+    if 'username' in session:
+        return redirect(url_for('index'))
+
+    login_path = os.path.join(TEMPLATES_DIR, "login.html")
+    if os.path.isfile(login_path):
+        return send_file(login_path)
+    # Fallback if template missing
+    return """
+    <html><body>
+    <h2>Sensor Toolkit Login</h2>
+    <form method="post">
+      <label>Username: <input type="text" name="username"></label><br>
+      <label>Password: <input type="password" name="password"></label><br>
+      <button type="submit">Login</button>
+    </form>
+    </body></html>
+    """
+
+
+@app.route('/logout')
+def logout():
+    """Clear session and return to login screen."""
+    session.pop('username', None)
+    return redirect(url_for('login'))
+
+
 @app.route('/')
+@app.route('/index.html')
 def index():
-    """Serve the main index page."""
-    return send_file(os.path.join(APP_ROOT, 'index.html'))
+    """Serve the main index page (requires login)."""
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "index.html"))
 
 
 @app.route('/downlinks')
+@app.route('/downlinks.html')
 def downlinks_page():
-    """Serve the downlinks page."""
-    return send_file(os.path.join(APP_ROOT, 'downlinks.html'))
+    """Serve the downlinks page (requires login)."""
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "downlinks.html"))
 
 
 @app.route('/tools_downlinks')
@@ -150,17 +286,22 @@ def tools_downlinks_redirect():
 
 
 @app.route('/sensors')
+@app.route('/sensors.html')
 def sensors_page():
-    """Serve the sensor monitoring page."""
-    return send_file(os.path.join(APP_ROOT, 'sensors.html'))
+    """Serve the sensor monitoring page (requires login)."""
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "sensors.html"))
 
 
 @app.route('/RBS30X-ABM/rbs30x-abm.html')
 @app.route('/RBS30x-ABM/rbs30x-abm.html')
 @app.route('/rbs30x-abm.html')
 def abm_page():
-    """Serve the RBS30X-ABM sensor configuration page."""
-    return send_file(os.path.join(APP_ROOT, 'RBS30X-ABM', 'rbs30x-abm.html'))
+    """Serve the RBS30X-ABM sensor configuration page (requires login)."""
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "RBS30X-ABM", "rbs30x-abm.html"))
 
 
 @app.route('/RBS30X-ABM/<path:filename>')
@@ -170,7 +311,7 @@ def abm_static(filename):
     # Security: prevent directory traversal
     if '..' in filename or filename.startswith('/'):
         return "Invalid path", 403
-    return send_from_directory(os.path.join(APP_ROOT, 'RBS30X-ABM'), filename)
+    return send_from_directory(os.path.join(TEMPLATES_DIR, "RBS30X-ABM"), filename)
 
 
 @app.route('/connect', methods=['POST'])
@@ -181,7 +322,7 @@ def connect_route():
     Expects JSON: {"broker": "...", "port": 1883, "topic": "lora/+/up"}
     When running on the gateway, broker will usually be "localhost".
     """
-    data = request.get_json() or {}
+    data = request.get_json(force=True, silent=True) or {}
     broker = data.get('broker', 'localhost')
     port = int(data.get('port', 1883))
     topic = data.get('topic', 'lora/+/up')
@@ -201,10 +342,12 @@ def get_sensors_route():
     If the discovery list is empty, derive DevEUIs from the message buffer so
     downlink pages still show devices that have sent uplinks."""
     sensors = get_sensors()
+    if not isinstance(sensors, list):
+        sensors = []
     if not sensors and MQTT_AVAILABLE:
         try:
             messages = get_messages()
-            seen = {s["DevEUI"] for s in sensors}
+            seen = {s.get("DevEUI", "") for s in sensors if isinstance(s, dict)}
             for msg in messages:
                 if msg.get("type") == "json" and isinstance(msg.get("data"), dict):
                     dev_eui = msg["data"].get("deveui")
@@ -387,7 +530,7 @@ def upload_decoder_route():
 def save_decoder_route():
     """Save a decoder JS from text (JSON: {name, content})."""
     try:
-        data = request.get_json() or {}
+        data = request.get_json(force=True, silent=True) or {}
         name = secure_filename(str(data.get("name", "")).strip())
         content = str(data.get("content", ""))
         if not _is_safe_decoder_filename(name):
@@ -410,7 +553,7 @@ def save_decoder_route():
 def delete_decoder_route():
     """Delete a decoder JS file (JSON: {name})."""
     try:
-        data = request.get_json() or {}
+        data = request.get_json(force=True, silent=True) or {}
         name = secure_filename(str(data.get("name", "")).strip())
         if not _is_safe_decoder_filename(name):
             return jsonify({"error": "Invalid filename"}), 400
@@ -425,8 +568,10 @@ def delete_decoder_route():
 
 
 # --- Cloud Integrations API ---
+cloud_integrations = None
 try:
-    import cloud_integrations
+    import cloud_integrations as _ci
+    cloud_integrations = _ci
     CLOUD_INTEGRATIONS_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Cloud integrations not available: {e}")
@@ -435,14 +580,38 @@ except ImportError as e:
 
 @app.route('/cloud_integrations')
 def cloud_integrations_page():
-    """Serve the cloud integrations page."""
-    return send_file(os.path.join(APP_ROOT, 'cloud_integrations.html'))
+    """Serve the cloud integrations page (requires login)."""
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "cloud_integrations.html"))
+
+
+@app.route('/cloud_integrations.html')
+def cloud_integrations_html():
+    """Alias for cloud integrations page (nav links use .html)."""
+    return cloud_integrations_page()
+
+
+@app.route('/uplinks.html')
+def uplinks_page():
+    """Serve the uplinks page (requires login)."""
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "uplinks.html"))
+
+
+@app.route('/decoders.html')
+def decoders_page():
+    """Serve the decoders page (requires login)."""
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "decoders.html"))
 
 
 @app.route('/api/integrations', methods=['GET'])
 def list_integrations_route():
     """List all cloud integrations."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"integrations": [], "error": "Cloud integrations not available"}), 200
     try:
         integrations = cloud_integrations.get_integrations()
@@ -455,10 +624,11 @@ def list_integrations_route():
 @app.route('/api/integrations', methods=['POST'])
 def add_integration_route():
     """Add a new cloud integration."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"error": "Cloud integrations not available"}), 500
+    assert cloud_integrations is not None
     try:
-        data = request.get_json() or {}
+        data = request.get_json(force=True, silent=True) or {}
         integration = cloud_integrations.add_integration(data)
         return jsonify({"integration": integration}), 201
     except Exception as e:
@@ -469,7 +639,7 @@ def add_integration_route():
 @app.route('/api/integrations/<integration_id>', methods=['GET'])
 def get_integration_route(integration_id):
     """Get a specific integration by ID."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"error": "Cloud integrations not available"}), 500
     try:
         integration = cloud_integrations.get_integration(integration_id)
@@ -484,10 +654,11 @@ def get_integration_route(integration_id):
 @app.route('/api/integrations/<integration_id>', methods=['PUT'])
 def update_integration_route(integration_id):
     """Update an existing integration."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"error": "Cloud integrations not available"}), 500
+    assert cloud_integrations is not None
     try:
-        data = request.get_json() or {}
+        data = request.get_json(force=True, silent=True) or {}
         integration = cloud_integrations.update_integration(integration_id, data)
         if integration:
             return jsonify({"integration": integration}), 200
@@ -500,7 +671,7 @@ def update_integration_route(integration_id):
 @app.route('/api/integrations/<integration_id>', methods=['DELETE'])
 def delete_integration_route(integration_id):
     """Delete an integration."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"error": "Cloud integrations not available"}), 500
     try:
         if cloud_integrations.delete_integration(integration_id):
@@ -514,10 +685,10 @@ def delete_integration_route(integration_id):
 @app.route('/api/integrations/<integration_id>/toggle', methods=['POST'])
 def toggle_integration_route(integration_id):
     """Enable or disable an integration."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"error": "Cloud integrations not available"}), 500
     try:
-        data = request.get_json() or {}
+        data = request.get_json(force=True, silent=True) or {}
         enabled = data.get("enabled", True)
         integration = cloud_integrations.toggle_integration(integration_id, enabled)
         if integration:
@@ -531,8 +702,9 @@ def toggle_integration_route(integration_id):
 @app.route('/api/integrations/<integration_id>/test', methods=['POST'])
 def test_integration_route(integration_id):
     """Test an integration with a sample message."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"success": False, "message": "Cloud integrations not available"}), 500
+    assert cloud_integrations is not None
     try:
         integration = cloud_integrations.get_integration(integration_id)
         if not integration:
@@ -547,10 +719,11 @@ def test_integration_route(integration_id):
 @app.route('/api/integrations/test', methods=['POST'])
 def test_integration_unsaved_route():
     """Test an unsaved integration configuration with a sample message."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"success": False, "message": "Cloud integrations not available"}), 500
+    assert cloud_integrations is not None
     try:
-        integration = request.get_json() or {}
+        integration = request.get_json(force=True, silent=True) or {}
         result = cloud_integrations.test_integration(integration)
         return jsonify(result), 200
     except Exception as e:
@@ -561,9 +734,9 @@ def test_integration_unsaved_route():
 @app.route('/api/cloud/forward-message', methods=['POST'])
 def forward_message_route():
     """Accept a decoded message from the uplinks page and queue it for cloud forwarding (decoder from Uplinks page)."""
-    if not CLOUD_INTEGRATIONS_AVAILABLE:
+    if not CLOUD_INTEGRATIONS_AVAILABLE or cloud_integrations is None:
         return jsonify({"error": "Cloud integrations not available"}), 500
-    data = request.get_json() or {}
+    data = request.get_json(force=True, silent=True) or {}
     try:
         cloud_integrations.forward_message({
             "topic": data.get("topic", ""),
@@ -580,12 +753,13 @@ def forward_message_route():
 
 @app.route('/api/lora/packets/queue', methods=['GET'])
 def gateway_queue_get():
-    """Proxy GET to gateway api/lora/packets/queue. Query param: broker (gateway host)."""
+    """Proxy GET to gateway downlink queue API (api/lora/packets/down). Query param: broker (gateway host)."""
     broker = request.args.get("broker", "").strip()
     base = _gateway_base_url(broker)
     if not base:
         return jsonify({"error": "Broker (gateway) required. Connect first or set broker."}), 400
-    url = base.rstrip("/") + "/api/lora/packets/queue"
+    # mPower downlink queue endpoint
+    url = base.rstrip("/") + "/api/lora/packets/down"
     try:
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -606,12 +780,13 @@ def gateway_queue_get():
 
 @app.route('/api/lora/packets/queue/<path:subpath>', methods=['DELETE'])
 def gateway_queue_delete(subpath):
-    """Proxy DELETE to gateway api/lora/packets/queue/<deveui>/<id>, /<deveui>, or /all. Query param: broker."""
+    """Proxy DELETE to gateway downlink queue API (api/lora/downlink-queue/<...>). Query param: broker."""
     broker = request.args.get("broker", "").strip()
     base = _gateway_base_url(broker)
     if not base:
         return jsonify({"error": "Broker (gateway) required."}), 400
-    url = base.rstrip("/") + "/api/lora/packets/queue/" + subpath.lstrip("/")
+    # mPower downlink queue delete endpoint
+    url = base.rstrip("/") + "/api/lora/downlink-queue/" + subpath.lstrip("/")
     try:
         req = urllib.request.Request(url, method="DELETE")
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -636,9 +811,9 @@ def send_downlink_route():
     Send a downlink to a selected sensor via MQTT.
 
     Expects JSON payload matching the structure built in
-    `NetworkDashboard-0.1/static/js/downlinks.js`.
+    `static/js/downlinks.js`.
     """
-    data = request.get_json() or {}
+    data = request.get_json(force=True, silent=True) or {}
     logger.info(f"Received downlink request: {json.dumps(data)}")
     
     # Extract broker from data if provided, otherwise use current connection
@@ -654,63 +829,53 @@ def send_downlink_route():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/<path:path>')
-def serve_static(path):
-    """Serve static files from the root directory and subdirectories."""
-    # Security: prevent directory traversal
-    if '..' in path or path.startswith('/'):
-        return "Invalid path", 403
-    
-    # Normalize path for case-insensitive matching on Windows
-    normalized_path = path.replace('\\', '/')
-
-    # Always resolve under APP_ROOT (supports frozen builds)
-    abs_path = os.path.join(APP_ROOT, normalized_path)
-    
-    # Check if the file exists (case-sensitive check first)
+def _try_serve_from(directory: str, normalized_path: str):
+    """Try to serve a file or directory index from directory + normalized_path. Returns (response, True) or (None, False)."""
+    abs_path = os.path.join(directory, normalized_path)
     if os.path.isfile(abs_path):
-        directory = os.path.dirname(abs_path)
-        filename = os.path.basename(abs_path)
-        return send_from_directory(directory, filename)
-    
-    # Case-insensitive fallback: try to find the file with different case
-    # This is useful on Windows where filesystem is case-insensitive but URLs might be case-sensitive
-    if not os.path.isfile(abs_path):
-        # Try to find the file with case-insensitive matching
-        path_parts = normalized_path.split('/')
-        if len(path_parts) > 1:
-            dir_part = os.path.join(APP_ROOT, *path_parts[:-1])
-            file_part = path_parts[-1]
-            if os.path.isdir(dir_part):
-                # List files in directory and find case-insensitive match
-                try:
-                    for actual_file in os.listdir(dir_part):
-                        if actual_file.lower() == file_part.lower():
-                            return send_from_directory(dir_part, actual_file)
-                except OSError:
-                    pass
-    
-    # If it's a directory, try to serve index.html from it
+        return send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path)), True
     if os.path.isdir(abs_path):
-        index_path = os.path.join(abs_path, 'index.html')
+        index_path = os.path.join(abs_path, "index.html")
         if os.path.isfile(index_path):
-            return send_from_directory(abs_path, 'index.html')
-        # If no index.html, try to find an HTML file with the directory name
+            return send_from_directory(abs_path, "index.html"), True
         try:
-            html_files = [f for f in os.listdir(abs_path) if f.endswith('.html')]
+            html_files = [f for f in os.listdir(abs_path) if f.endswith(".html")]
             if html_files:
-                # Try to find a file matching the directory name
-                dir_name = os.path.basename(abs_path.rstrip('/'))
+                dir_name = os.path.basename(abs_path.rstrip("/"))
                 for html_file in html_files:
-                    if html_file.startswith(dir_name) or html_file == 'index.html':
-                        return send_from_directory(abs_path, html_file)
-                # If no match, serve the first HTML file
-                return send_from_directory(abs_path, html_files[0])
+                    if html_file.startswith(dir_name) or html_file == "index.html":
+                        return send_from_directory(abs_path, html_file), True
+                return send_from_directory(abs_path, html_files[0]), True
         except OSError:
             pass
-    
-    # Default: try to serve the file anyway (for relative paths)
+    path_parts = normalized_path.split("/")
+    if len(path_parts) > 1:
+        dir_part = os.path.join(directory, *path_parts[:-1])
+        file_part = path_parts[-1]
+        if os.path.isdir(dir_part):
+            try:
+                for actual_file in os.listdir(dir_part):
+                    if actual_file.lower() == file_part.lower():
+                        return send_from_directory(dir_part, actual_file), True
+            except OSError:
+                pass
+    return None, False
+
+
+@app.route('/<path:path>')  # type: ignore[arg-type]
+def serve_static(path: str):
+    """Serve files from templates/, then static/, then root (for backward compatibility)."""
+    if ".." in path or path.startswith("/"):
+        return "Invalid path", 403
+    normalized_path = path.replace("\\", "/")
+
+    for base in (TEMPLATES_DIR, STATIC_DIR, APP_ROOT):
+        resp, ok = _try_serve_from(base, normalized_path)
+        if ok:
+            return resp
+
     try:
+        abs_path = os.path.join(APP_ROOT, normalized_path)
         directory = os.path.dirname(abs_path)
         filename = os.path.basename(abs_path)
         return send_from_directory(directory, filename)
@@ -775,6 +940,27 @@ if __name__ == '__main__':
 
     t = threading.Thread(target=auto_connect_mqtt, daemon=True)
     t.start()
+
+    # Write status.json with local IP at server start
+    def write_status_json():
+        lan_ip = None
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            lan_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            pass
+        status = {"lan_ip": lan_ip}
+        status_path = os.path.join(APP_ROOT, "status.json")
+        try:
+            with open(status_path, "w", encoding="utf-8") as f:
+                json.dump(status, f, indent=2)
+            logger.info("Wrote %s", status_path)
+        except Exception as e:
+            logger.warning("Could not write status.json: %s", e)
+
+    write_status_json()
 
     logger.info(f"Starting Sensor Toolkit server on {config['host']}:{config['port']}")
     app.run(host=config['host'], port=config['port'], debug=config['debug'])

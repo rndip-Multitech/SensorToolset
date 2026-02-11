@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Send Downlinks</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .panel { margin: 20px 0; padding: 15px; background-color: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; }
+        .form-group { display: flex; align-items: center; margin-bottom: 1em; }
+        .form-group label { margin-right: 1em; font-weight: bold; color: #00394d; min-width: 150px; }
+        .form-group input, .form-group select { flex: 1; max-width: 300px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .status { margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }
+        .status.ok { background: #e8f5e9; border: 1px solid #c8e6c9; color: #1b5e20; }
+        .status.err { background: #ffebee; border: 1px solid #ffcdd2; color: #b71c1c; }
+        .schema-field { margin-bottom: 12px; }
+        .schema-field label { display: block; margin-bottom: 4px; font-weight: bold; color: #00394d; }
+        .schema-field input, .schema-field select { width: 100%; max-width: 400px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .mono { font-family: ui-monospace, monospace; font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px; word-break: break-all; }
+        .mode-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+        .mode-tabs button { padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .mode-tabs button:hover { background: #f0f0f0; color: #333; }
+        .mode-tabs button.active { background: #00394d; color: #fff; border-color: #00394d; }
+        .mode-panel { display: none; }
+        .mode-panel.active { display: block; }
+        textarea.raw-payload { width: 100%; max-width: 600px; min-height: 100px; padding: 8px; font-family: monospace; font-size: 12px; }
+        .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: bold; }
+        .pill.sent { background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }
+        .pill.failed { background: #ffebee; color: #b71c1c; border: 1px solid #ffcdd2; }
+        .status-indicator { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+        .status-connected { background-color: #4caf50; }
+        .status-disconnected { background-color: #9e9e9e; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>Send Downlinks</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item"><img src="/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home"><a href="index.html">Home</a></li>
+                <li class="item"><img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks"><a href="uplinks.html">Uplinks</a></li>
+                <li class="item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;"><path d="M3 3v18h18"></path><path d="M7 16l4-4 4 4 6-6"></path></svg><a href="sensors.html">Sensors</a></li>
+                <li class="item active"><img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks"><a href="downlinks.html">Send Downlinks</a></li>
+                <li class="item"><img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders"><a href="decoders.html">Decoders</a></li>
+                <li class="item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg><a href="cloud_integrations.html">Cloud Integrations</a></li>
+                <li class="item"><img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge"><a href="radiobridge.html">RadioBridge Config</a></li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2026 Multitech Systems, Inc.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+            <h2 class="section-title">Send Downlinks <button type="button" class="help-button" onclick="alert('Build downlinks from a RadioBridge or third-party encoder, or send a raw hex/base64 payload with port. Connect to your gateway broker to load devices and send.')" title="Help">?</button></h2>
+
+            <div class="panel">
+                <h3>Connection</h3>
+                <form id="connectForm">
+                    <div class="form-group">
+                        <label for="broker">MQTT Broker IP:</label>
+                        <input type="text" id="broker" name="broker" value="127.0.0.1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="port">Port:</label>
+                        <input type="number" id="port" name="port" value="1883" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="topic">Downlink Topic Pattern:</label>
+                        <input type="text" id="topic" name="topic" value="lora/{deveui}/down" required>
+                    </div>
+                    <button type="submit" class="action-button">Connect</button>
+                    <span id="connectionStatus" style="margin-left: 10px;">
+                        <span class="status-indicator status-disconnected"></span>
+                        <span>Disconnected</span>
+                    </span>
+                </form>
+            </div>
+
+            <div class="panel">
+                <h3>Device <button type="button" class="help-button" onclick="alert('Devices are loaded from active sessions on the gateway\'s LoRa Network Server. Connect first to load the list.')" title="Help">?</button></h3>
+                <div class="form-group">
+                    <label for="deviceSelect">Device (DevEUI):</label>
+                    <select id="deviceSelect">
+                        <option value="">-- Connect to load devices --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Downlink mode <button type="button" class="help-button" onclick="alert('Build from encoder: use a codec (RadioBridge or third-party) to build a downlink from parameters.\n\nRaw hex/base64: send a raw payload as hex or base64 and specify the port. Enter either hex or base64; the other is ignored if both are set (hex takes precedence).')" title="Help">?</button></h3>
+                <div class="mode-tabs">
+                    <button type="button" id="tabEncoder" class="active">Build from encoder</button>
+                    <button type="button" id="tabRaw">Raw hex / base64</button>
+                </div>
+
+                <div id="panelEncoder" class="mode-panel active">
+                    <div class="form-group">
+                        <label for="codecSelect">Codec:</label>
+                        <select id="codecSelect"><option value="">-- No codecs with encoders available --</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="encoderSelect">Command:</label>
+                        <select id="encoderSelect"><option value="">-- Select a codec first --</option></select>
+                    </div>
+                    <div class="panel" id="encoderParamsPanel" style="display: none;">
+                        <h4>Command Parameters</h4>
+                        <div id="encoderParamsContainer"></div>
+                    </div>
+                    <div class="panel" id="previewPanel" style="display: none;">
+                        <h4>Generated Payload</h4>
+                        <div class="form-group"><label>Port:</label><input type="number" id="previewPort" readonly style="background: #f5f5f5;"></div>
+                        <div class="form-group"><label>Payload (hex):</label><div class="mono" id="previewHex"></div></div>
+                        <div class="form-group"><label>Payload (base64):</label><div class="mono" id="previewBase64"></div></div>
+                        <button type="button" class="action-button" id="sendEncoderBtn">Send Downlink</button>
+                    </div>
+                </div>
+
+                <div id="panelRaw" class="mode-panel">
+                    <div class="form-group">
+                        <label for="rawPort">Port (fPort):</label>
+                        <input type="number" id="rawPort" name="rawPort" value="1" min="1" max="223">
+                    </div>
+                    <div class="form-group" style="align-items: flex-start;">
+                        <label for="rawHex">Payload (hex):</label>
+                        <textarea id="rawHex" class="raw-payload" placeholder="e.g. ff000102"></textarea>
+                    </div>
+                    <div class="form-group" style="align-items: flex-start;">
+                        <label for="rawBase64">Payload (base64):</label>
+                        <textarea id="rawBase64" class="raw-payload" placeholder="e.g. /wABAg=="></textarea>
+                    </div>
+                    <button type="button" class="action-button" id="sendRawBtn">Send Raw Downlink</button>
+                </div>
+            </div>
+
+            <div id="status" class="status"></div>
+
+            <!-- Downlink queue UI removed (gateway downlink queue API not reliable/consistent across deployments) -->
+        </div>
+    </section>
+
+    <script src="/static/js/decoders/decoder_registry.js"></script>
+    <script src="/static/js/decoders/radiobridge.js"></script>
+    <script src="/static/js/decoders/sensative_strips.js"></script>
+    <script src="/static/js/decoders/raw.js"></script>
+    <script>
+        let customDecodersLoaded = false;
+        let brokerIp = '';
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.async = false;
+                s.onload = () => resolve(true);
+                s.onerror = () => reject(new Error('Failed to load ' + src));
+                document.head.appendChild(s);
+            });
+        }
+
+        async function loadCustomDecodersOnce() {
+            if (customDecodersLoaded) return;
+            customDecodersLoaded = true;
+            try {
+                const res = await fetch('/api/decoders/list');
+                const data = await res.json().catch(() => ({}));
+                const files = (data && data.files) ? data.files : [];
+                for (const f of files) {
+                    if (!f || !f.url) continue;
+                    const v = (f.mtime != null) ? String(f.mtime) : String(Date.now());
+                    try { await loadScript(f.url + '?v=' + encodeURIComponent(v)); } catch (e) { console.warn('Custom decoder load:', e); }
+                }
+            } catch (e) { console.warn('Custom decoders:', e); }
+        }
+
+        function showStatus(kind, msg) {
+            const el = document.getElementById('status');
+            el.className = 'status ' + (kind === 'ok' ? 'ok' : 'err');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+        function clearStatus() {
+            document.getElementById('status').style.display = 'none';
+        }
+
+        function connectToBroker(e) {
+            if (e) e.preventDefault();
+            const broker = document.getElementById('broker').value;
+            const port = document.getElementById('port').value;
+            const topic = document.getElementById('topic').value;
+            fetch('/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broker, port, topic }) })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.message) {
+                        brokerIp = broker;
+                        showStatus('ok', data.message);
+                        const st = document.querySelector('#connectionStatus .status-indicator');
+                        const tx = document.querySelector('#connectionStatus span:last-child');
+                        if (st) st.className = 'status-indicator status-connected';
+                        if (tx) tx.textContent = 'Connected';
+                        fetchDevices();
+                    } else {
+                        showStatus('err', data.error || 'Failed to connect');
+                    }
+                })
+                .catch(err => showStatus('err', 'Error: ' + err));
+        }
+
+        async function fetchDevices() {
+            const select = document.getElementById('deviceSelect');
+            try {
+                const res = await fetch('/api/network_sessions');
+                const data = await res.json();
+                let list = data.devices || [];
+                if (data.error && list.length === 0) {
+                    showStatus('err', 'Network server: ' + data.error);
+                }
+                // Fallback to MQTT-discovered sensors if sessions API returned nothing
+                if (list.length === 0) {
+                    const fallback = await fetch('/get_sensors').then(r => r.json()).catch(() => ({}));
+                    list = (fallback.sensors || []).map(s => ({ DevEUI: s.DevEUI, last_seen: '' }));
+                }
+                select.innerHTML = '<option value="">-- Select device --</option>';
+                list.forEach(dev => {
+                    const opt = document.createElement('option');
+                    opt.value = dev.DevEUI;
+                    let label = dev.DevEUI;
+                    if (dev.last_seen) {
+                        try {
+                            const d = new Date(dev.last_seen);
+                            label += ' (last seen: ' + d.toLocaleString() + ')';
+                        } catch (e) {
+                            label += ' (last seen: ' + dev.last_seen + ')';
+                        }
+                    }
+                    opt.textContent = label;
+                    select.appendChild(opt);
+                });
+                if (list.length > 0 && !data.error) {
+                    showStatus('ok', 'Loaded ' + list.length + ' device(s)');
+                }
+            } catch (e) {
+                console.error('Fetch devices:', e);
+                showStatus('err', 'Failed to load devices: ' + (e.message || e));
+            }
+        }
+
+        function setMode(mode) {
+            document.querySelectorAll('.mode-tabs button').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.mode-panel').forEach(p => p.classList.remove('active'));
+            if (mode === 'raw') {
+                document.getElementById('tabRaw').classList.add('active');
+                document.getElementById('panelRaw').classList.add('active');
+            } else {
+                document.getElementById('tabEncoder').classList.add('active');
+                document.getElementById('panelEncoder').classList.add('active');
+            }
+        }
+
+        document.getElementById('tabEncoder').addEventListener('click', () => setMode('encoder'));
+        document.getElementById('tabRaw').addEventListener('click', () => setMode('raw'));
+
+        function populateCodecs() {
+            const codecs = (window.RBTDecoders && window.RBTDecoders.listDecodersWithEncoders) ? window.RBTDecoders.listDecodersWithEncoders() : [];
+            const select = document.getElementById('codecSelect');
+            select.innerHTML = '<option value="">-- No codecs with encoders --</option>';
+            codecs.forEach(c => {
+                const o = document.createElement('option');
+                o.value = c.id;
+                o.textContent = c.name;
+                select.appendChild(o);
+            });
+        }
+
+        function populateEncoders() {
+            const codecId = document.getElementById('codecSelect').value;
+            const encoderSelect = document.getElementById('encoderSelect');
+            encoderSelect.innerHTML = '<option value="">-- Select codec first --</option>';
+            if (!codecId) return;
+            const codec = window.RBTDecoders.getDecoder(codecId);
+            if (!codec || !codec.encoders) return;
+            codec.encoders.forEach(enc => {
+                const o = document.createElement('option');
+                o.value = enc.id;
+                o.textContent = enc.name;
+                encoderSelect.appendChild(o);
+            });
+        }
+
+        function renderEncoderParams() {
+            const codecId = document.getElementById('codecSelect').value;
+            const encoderId = document.getElementById('encoderSelect').value;
+            const container = document.getElementById('encoderParamsContainer');
+            const panel = document.getElementById('encoderParamsPanel');
+            if (!codecId || !encoderId) { panel.style.display = 'none'; return; }
+            const encoder = window.RBTDecoders.getEncoder(codecId, encoderId);
+            if (!encoder || !encoder.schema) { panel.style.display = 'none'; return; }
+            container.innerHTML = '';
+            encoder.schema.forEach(field => {
+                const div = document.createElement('div');
+                div.className = 'schema-field';
+                const label = document.createElement('label');
+                label.textContent = (field.label || field.key) + (field.required ? ' *' : '');
+                div.appendChild(label);
+                if (field.type === 'select' && field.options) {
+                    const sel = document.createElement('select');
+                    sel.id = 'param_' + field.key;
+                    sel.required = !!field.required;
+                    field.options.forEach(opt => {
+                        const o = document.createElement('option');
+                        o.value = (typeof opt === 'string') ? opt : opt.value;
+                        o.textContent = (typeof opt === 'string') ? opt : (opt.label || opt.value);
+                        sel.appendChild(o);
+                    });
+                    div.appendChild(sel);
+                } else {
+                    const input = document.createElement('input');
+                    input.type = field.type || 'text';
+                    input.id = 'param_' + field.key;
+                    input.required = !!field.required;
+                    if (field.placeholder) input.placeholder = field.placeholder;
+                    if (field.default !== undefined) input.value = field.default;
+                    div.appendChild(input);
+                }
+                container.appendChild(div);
+            });
+            panel.style.display = 'block';
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const codecId = document.getElementById('codecSelect').value;
+            const encoderId = document.getElementById('encoderSelect').value;
+            const previewPanel = document.getElementById('previewPanel');
+            if (!codecId || !encoderId) { previewPanel.style.display = 'none'; return; }
+            const encoder = window.RBTDecoders.getEncoder(codecId, encoderId);
+            if (!encoder) { previewPanel.style.display = 'none'; return; }
+            try {
+                const params = {};
+                if (encoder.schema) {
+                    encoder.schema.forEach(field => {
+                        const el = document.getElementById('param_' + field.key);
+                        if (el) { let v = el.value; if (field.type === 'number') v = parseFloat(v) || 0; params[field.key] = v; }
+                    });
+                }
+                const result = encoder.encode(params);
+                if (!result || (!result.data_hex && !result.data_base64)) { previewPanel.style.display = 'none'; return; }
+                const port = result.port || encoder.defaultPort || 1;
+                let hex = result.data_hex || '';
+                let base64 = result.data_base64 || '';
+                if (hex && !base64) {
+                    const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+                    base64 = btoa(String.fromCharCode(...bytes));
+                } else if (base64 && !hex) {
+                    const bytes = new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
+                    hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+                }
+                document.getElementById('previewPort').value = port;
+                document.getElementById('previewHex').textContent = hex || '(empty)';
+                document.getElementById('previewBase64').textContent = base64 || '(empty)';
+                previewPanel.style.display = 'block';
+            } catch (e) {
+                previewPanel.style.display = 'none';
+            }
+        }
+
+        async function sendEncoderDownlink() {
+            clearStatus();
+            const devEui = document.getElementById('deviceSelect').value;
+            if (!devEui) { showStatus('err', 'Select a device first.'); return; }
+            const codecId = document.getElementById('codecSelect').value;
+            const encoderId = document.getElementById('encoderSelect').value;
+            if (!codecId || !encoderId) { showStatus('err', 'Select codec and command.'); return; }
+            const encoder = window.RBTDecoders.getEncoder(codecId, encoderId);
+            if (!encoder) { showStatus('err', 'Encoder not found.'); return; }
+            try {
+                const params = {};
+                if (encoder.schema) {
+                    encoder.schema.forEach(field => {
+                        const el = document.getElementById('param_' + field.key);
+                        if (el) { let v = el.value; if (field.type === 'number') v = parseFloat(v) || 0; params[field.key] = v; }
+                    });
+                }
+                const result = encoder.encode(params);
+                const port = result.port || encoder.defaultPort || 1;
+                let base64 = result.data_base64 || '';
+                if (!base64 && result.data_hex) {
+                    const bytes = new Uint8Array(result.data_hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+                    base64 = btoa(String.fromCharCode(...bytes));
+                }
+                if (!base64) { showStatus('err', 'Encoder returned empty payload.'); return; }
+                const topicPattern = document.getElementById('topic').value || 'lora/{deveui}/down';
+                const topic = topicPattern.replace('{deveui}', devEui.replace(/-/g, ''));
+                const res = await fetch('/send_downlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, data: base64, port, broker: brokerIp || undefined }) });
+                const data = await res.json().catch(() => ({}));
+                if (data.error) showStatus('err', data.error);
+                else showStatus('ok', 'Downlink sent to ' + devEui + ' on port ' + port);
+            } catch (e) {
+                showStatus('err', 'Error: ' + e);
+            }
+        }
+
+        async function sendRawDownlink() {
+            clearStatus();
+            const devEui = document.getElementById('deviceSelect').value;
+            if (!devEui) { showStatus('err', 'Select a device first.'); return; }
+            const port = parseInt(document.getElementById('rawPort').value, 10) || 1;
+            let hex = (document.getElementById('rawHex').value || '').replace(/\s/g, '');
+            let base64 = (document.getElementById('rawBase64').value || '').replace(/\s/g, '');
+            if (hex) {
+                if (!/^[0-9a-fA-F]*$/.test(hex)) { showStatus('err', 'Invalid hex: use 0-9 and A-F only.'); return; }
+                const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+                base64 = btoa(String.fromCharCode(...bytes));
+            } else if (base64) {
+                try { atob(base64); } catch (e) { showStatus('err', 'Invalid base64.'); return; }
+            } else {
+                showStatus('err', 'Enter hex or base64 payload.'); return;
+            }
+            const topicPattern = document.getElementById('topic').value || 'lora/{deveui}/down';
+            const topic = topicPattern.replace('{deveui}', devEui.replace(/-/g, ''));
+            try {
+                const res = await fetch('/send_downlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, data: base64, port, broker: brokerIp || undefined }) });
+                const data = await res.json().catch(() => ({}));
+                if (data.error) {
+                    showStatus('err', data.error);
+                } else {
+                    showStatus('ok', 'Raw downlink sent to ' + devEui + ' on port ' + port);
+                    document.getElementById('rawHex').value = '';
+                    document.getElementById('rawBase64').value = '';
+                }
+            } catch (e) {
+                showStatus('err', 'Error: ' + e);
+            }
+        }
+
+        document.getElementById('connectForm').addEventListener('submit', connectToBroker);
+        document.getElementById('codecSelect').addEventListener('change', () => { populateEncoders(); renderEncoderParams(); });
+        document.getElementById('encoderSelect').addEventListener('change', renderEncoderParams);
+        document.getElementById('sendEncoderBtn').addEventListener('click', sendEncoderDownlink);
+        document.getElementById('sendRawBtn').addEventListener('click', sendRawDownlink);
+        document.addEventListener('input', e => { if (e.target.id && e.target.id.startsWith('param_')) updatePreview(); });
+
+        loadCustomDecodersOnce().then(() => {
+            populateCodecs();
+        });
+
+        // When arriving from RadioBridge config "Schedule Downlink", pre-fill raw hex and show where to send it
+        (function applyHexcodeFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const hexcode = params.get('hexcode');
+            if (!hexcode || !hexcode.trim()) return;
+            const normalized = hexcode.trim().replace(/\s/g, '').replace(/^0x/i, '');
+            if (!/^[0-9a-fA-F]*$/.test(normalized)) return;
+            setMode('raw');
+            const rawHexEl = document.getElementById('rawHex');
+            const rawBase64El = document.getElementById('rawBase64');
+            if (rawHexEl) {
+                rawHexEl.value = normalized;
+                rawHexEl.focus();
+            }
+            if (rawBase64El) rawBase64El.value = '';
+            showStatus('ok', 'Hex from RadioBridge config loaded. Select a device above, then click "Send Raw Downlink" to send.');
+            document.getElementById('panelRaw').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+        })();
+    </script>
+</body>
+</html>

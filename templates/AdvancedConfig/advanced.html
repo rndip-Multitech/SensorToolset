@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Sensor Configuration</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="my-logo">
+                <img src="../MultiTech_Logo.png" alt="MultiTech Logo">
+                <h1>Advanced Sensor Configuration</h1>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-leftside">
+            <ul>
+                <li class="item">
+                    <img src="/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home">
+                    <a href="../index.html">Home</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks">
+                    <a href="../uplinks.html">Uplinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks">
+                    <a href="../downlinks.html">Send Downlinks</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
+                    <a href="../decoders.html">Decoders</a>
+                </li>
+                <li class="item">
+                    <img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge">
+                    <a href="../radiobridge.html">RadioBridge Config</a>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-profile">
+            <p>&copy; 2026 Multitech Systems, Inc.</p>
+            <p>All rights reserved.</p>
+        </div>
+    </nav>
+
+    <section>
+        <div class="container">
+
+
+    <!-- =========================== -->
+    <!-- PORT NUMBER SECTION         -->
+    <!-- =========================== -->
+    <section class="section">
+        <h3 class="section-title">Port Settings</h3>
+
+        <div class="row">
+            <div class="column">
+                <span class="inline-label">Port Number:&nbsp;&nbsp;&nbsp;1</span>
+            </div>
+        </div>
+        <div class="row">
+            <em>By default, RadioBridge Sensors use port 1 for downlinks.</em>
+        </div>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- LINK QUALITY CHECK SECTION  -->
+    <!-- =========================== -->
+    <section class="section">
+        <h3 class="section-title">Link Quality Check</h3>
+
+        <div class="row">
+            <div class="column">
+                <label for="linkQualityPeriod" class="inline-label">Link Quality Check Period:</label>
+                <select id="linkQualityPeriod" class="input-medium">
+                    <option value="hours">Hours</option>
+                    <option value="minutes">Minutes</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <label for="linkQualityTimeValue" class="inline-label">Link Quality Check Time Value:</label>
+                <select id="linkQualityTimeValue" class="input-small">
+                    <script>
+                        for (let i = 1; i <= 127; i++) {
+                            document.write('<option value="' + i + '">' + i + '</option>');
+                        }
+                    </script>
+                </select>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATED HEX SECTION       -->
+    <!-- =========================== -->
+    <section id="hex-section" class="section" style="display:none;">
+        <div class="row">
+            <h3 class="inline-title">Generated Hexcode:</h3>
+            <span id="hex-output" class="hex-display"></span>
+        </div>
+    </section>
+
+
+    <!-- =========================== -->
+    <!-- GENERATE BUTTON             -->
+    <!-- =========================== -->
+    <button id="generate-button" class="generate-button" onclick="generateHexcode()">
+        Generate Hexcode
+    </button>
+
+    <br>
+    <button id="copy-button" class="action-button" style="display:none;" onclick="copyHexcode()">Copy Hexcode</button>
+    <button id="schedule-button" class="action-button" style="display:none; background-color: #2196f3; color: white;" onclick="scheduleDownlink()">Schedule Downlink</button>
+    <button id="schedule-button" class="action-button" style="display:none; background-color: #2196f3; color: white;" onclick="scheduleDownlink()">Schedule Downlink</button>
+
+
+        </div>
+    </section>
+
+    <script src="js/script.js"></script>
+
+</body>
+</html>
+

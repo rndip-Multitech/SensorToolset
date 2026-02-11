@@ -1,7 +1,7 @@
 {
   "AppName": "Sensor Toolkit",
-  "AppVersion": "1.11.5",
-  "AppDescription": "MQTT uplink monitor + pluggable payload decoders + sensor visualization + RadioBridge configuration/downlinks + cloud integrations. Import gateway JSON history on uplinks page.",
-  "AppVersionNotes": "Temperature °C/°F toggle: Sensors charts and Uplinks decoded view + CSV/JSON export. Decoders: custom decoders in test dropdown after save; Node/CommonJS check ignores comments. Python 3.8/3.9 compatible (Optional type hints); Flask import error message.",
+  "AppVersion": "1.12",
+  "AppDescription": "MQTT uplink monitor + pluggable payload decoders + tailored RadioBridge dashboards (charts + animations) + configuration/downlinks + cloud integrations. Import gateway JSON history on uplinks page.",
+  "AppVersionNotes": "Always-forward MQTT using Uplinks page decoder with correct °C/°F handling; uplink cache + null/diagnostic spam filtering; improved MQTT broker reconnection. Added login flow (gateway-auth), per-sensor Radiobridge dashboards with animated status visuals (door/contact, movement, tilt, water, push button), and status.json exposing server host/port.",
   "PersistentStorage": true
 }
