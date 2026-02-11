@@ -59,6 +59,8 @@ app.secret_key = os.environ.get("SENSOR_TOOLKIT_SECRET", "sensor-toolkit-change-
 # Allow session cookie on both HTTP and HTTPS (don't require Secure flag)
 app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Invalidate old browser sessions whenever the server process restarts.
+APP_BOOT_ID = str(int(time.time()))
 
 # Custom decoder storage (served as static files)
 CUSTOM_DECODER_DIR = get_custom_decoders_dir()
@@ -228,6 +230,7 @@ def login():
         ok, err = authenticate_user(username, password, ip)
         if ok:
             session['username'] = username or 'user'
+            session['boot_id'] = APP_BOOT_ID
             if request.is_json:
                 return jsonify({'status': 'ok', 'redirect': url_for('index')}), 200
             return redirect(url_for('index'))
@@ -261,6 +264,28 @@ def logout():
     """Clear session and return to login screen."""
     session.pop('username', None)
     return redirect(url_for('login'))
+
+
+@app.before_request
+def enforce_login_for_html_pages():
+    """Require login for HTML pages, and invalidate stale sessions after restart."""
+    # Public routes/assets.
+    if request.path.startswith('/static/') or request.path in ('/login', '/logout'):
+        return None
+
+    # If session is from a previous server run, force fresh login.
+    if 'username' in session and session.get('boot_id') != APP_BOOT_ID:
+        session.clear()
+
+    if request.method != 'GET':
+        return None
+    if 'username' in session:
+        return None
+
+    # Protect root and direct HTML navigation (including catch-all served pages).
+    if request.path == '/' or request.path.endswith('.html'):
+        return redirect(url_for('login'))
+    return None
 
 
 @app.route('/')
