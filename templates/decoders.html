@@ -229,12 +229,13 @@
 
             <div class="panel">
                 <div class="row" style="justify-content: space-between;">
-                    <h3 style="margin: 0;">Installed custom decoders</h3>
+                    <h3 style="margin: 0;">Installed custom decoders &amp; encoders</h3>
                     <button class="action-button" id="refreshBtn" type="button">Refresh</button>
                 </div>
                 <table>
                     <thead>
                         <tr>
+                            <th>Type</th>
                             <th>Filename</th>
                             <th>URL</th>
                             <th>Size</th>
@@ -243,7 +244,7 @@
                         </tr>
                     </thead>
                     <tbody id="decoderTableBody">
-                        <tr><td colspan="5" style="text-align:center; padding: 16px;">Loading…</td></tr>
+                        <tr><td colspan="6" style="text-align:center; padding: 16px;">Loading…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -606,7 +607,7 @@ ${code}
 
         var loadedCustomDecoderUrls = new Set();
         function loadCustomDecodersIfNeeded(files) {
-            const urls = (files || []).map(function (f) { return f.url || ('/decoders/custom/' + f.name); }).filter(Boolean);
+            const urls = (files || []).map(function (f) { return f.url || (f.type === 'encoder' ? '/encoders/custom/' + f.name : '/decoders/custom/' + f.name); }).filter(Boolean);
             const toLoad = urls.filter(function (u) { return !loadedCustomDecoderUrls.has(u); });
             if (toLoad.length === 0) {
                 populateDecoderTesterDropdown();
@@ -624,35 +625,40 @@ ${code}
         }
 
         async function refreshList() {
-            tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 16px;">Loading…</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 16px;">Loading…</td></tr>';
             try {
-                const res = await fetch('/api/decoders/list');
-                const data = await res.json();
-                const files = (data && data.files) ? data.files : [];
-                if (!files.length) {
-                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 16px;">No custom decoders uploaded yet.</td></tr>';
+                const [decRes, encRes] = await Promise.all([fetch('/api/decoders/list'), fetch('/api/encoders/list')]);
+                const decData = await decRes.json().catch(() => ({}));
+                const encData = await encRes.json().catch(() => ({}));
+                const decoderFiles = (decData && decData.files) ? decData.files.map((f) => ({ ...f, type: 'decoder', url: f.url || ('/decoders/custom/' + f.name) })) : [];
+                const encoderFiles = (encData && encData.files) ? encData.files.map((f) => ({ ...f, type: 'encoder', url: f.url || ('/encoders/custom/' + f.name) })) : [];
+                const allFiles = decoderFiles.concat(encoderFiles);
+                if (!allFiles.length) {
+                    tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 16px;">No custom decoders or encoders uploaded yet.</td></tr>';
                     await loadCustomDecodersIfNeeded([]);
                     return;
                 }
 
                 tableBody.innerHTML = '';
-                files.forEach((f) => {
+                allFiles.forEach((f) => {
                     const tr = document.createElement('tr');
                     const url = f.url || '';
+                    const typeLabel = f.type === 'encoder' ? 'Encoder' : 'Decoder';
                     tr.innerHTML = `
+                        <td>${typeLabel}</td>
                         <td class="mono">${f.name}</td>
                         <td class="mono"><a href="${url}" target="_blank" rel="noreferrer">${url}</a></td>
                         <td>${f.size || 0}</td>
                         <td>${f.mtime || ''}</td>
                         <td>
-                            <button class="action-button" data-action="delete" data-name="${f.name}">Delete</button>
+                            <button class="action-button" data-action="delete" data-type="${f.type}" data-name="${f.name}">Delete</button>
                         </td>
                     `;
                     tableBody.appendChild(tr);
                 });
-                await loadCustomDecodersIfNeeded(files);
+                await loadCustomDecodersIfNeeded(allFiles);
             } catch (e) {
-                tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 16px; color: #b71c1c;">Failed to load list.</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 16px; color: #b71c1c;">Failed to load list.</td></tr>';
                 populateDecoderTesterDropdown();
             }
         }
@@ -689,6 +695,7 @@ ${code}
 
                 const detected = detectFormat(code);
                 const format = detected === 'unknown' ? 'rbt_plugin' : detected;
+                const isEncoderOnly = (detected === 'ttn_encoder' || detected === 'chirpstack_downlink');
 
                 let wrapped;
                 try {
@@ -698,7 +705,8 @@ ${code}
                     return;
                 }
 
-                const res = await fetch('/api/decoders/save', {
+                const saveUrl = isEncoderOnly ? '/api/encoders/save' : '/api/decoders/save';
+                const res = await fetch(saveUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: filename, content: wrapped }),
@@ -714,9 +722,9 @@ ${code}
                         : detected === 'chirpstack_uplink'
                         ? ' (auto-wrapped from ChirpStack decodeUplink)'
                         : detected === 'ttn_encoder'
-                        ? ' (auto-wrapped from TTN Encoder)'
+                        ? ' (encoder; auto-wrapped from TTN Encoder)'
                         : detected === 'chirpstack_downlink'
-                        ? ' (auto-wrapped from ChirpStack encodeDownlink)'
+                        ? ' (encoder; auto-wrapped from ChirpStack encodeDownlink)'
                         : '';
                 showStatus('ok', 'Saved: ' + (data.name || filename) + msgSuffix);
                 // Clear form after successful upload
@@ -753,7 +761,7 @@ ${code}
                 return;
             }
             try {
-                const res = await fetch('/api/decoders/save', {
+                const res = await fetch('/api/encoders/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, content: toSave }),
@@ -812,7 +820,7 @@ ${code}
                     showStatus('err', String(e && e.message ? e.message : e));
                     return;
                 }
-                const res = await fetch('/api/decoders/save', {
+                const res = await fetch('/api/encoders/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: filename, content: wrapped }),
@@ -930,7 +938,23 @@ ${code}
                 showStatus('err', data.error || 'Delete failed.');
                 return;
             }
-            showStatus('ok', `Deleted: ${data.name}`);
+            showStatus('ok', `Deleted decoder: ${data.name}`);
+            await refreshList();
+        }
+
+        async function deleteEncoder(name) {
+            clearStatus();
+            const res = await fetch('/api/encoders/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                showStatus('err', data.error || 'Delete failed.');
+                return;
+            }
+            showStatus('ok', `Deleted encoder: ${data.name}`);
             await refreshList();
         }
 
@@ -953,9 +977,10 @@ ${code}
             const btn = e.target.closest('button[data-action="delete"]');
             if (!btn) return;
             const name = btn.getAttribute('data-name');
+            const type = btn.getAttribute('data-type') || 'decoder';
             if (!name) return;
-            if (confirm(`Delete decoder "${name}"?`)) {
-                deleteDecoder(name);
+            if (confirm(`Delete ${type} "${name}"?`)) {
+                if (type === 'encoder') deleteEncoder(name); else deleteDecoder(name);
             }
         });
 

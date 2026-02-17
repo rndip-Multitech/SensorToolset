@@ -1158,20 +1158,21 @@
             if (customDecodersLoaded && !forceReload) return;
             customDecodersLoaded = true;
             try {
-                const res = await fetch('/api/decoders/list');
-                const data = await res.json().catch(() => ({}));
-                const files = (data && data.files) ? data.files : [];
+                const [decRes, encRes] = await Promise.all([fetch('/api/decoders/list'), fetch('/api/encoders/list')]);
+                const decData = await decRes.json().catch(() => ({}));
+                const encData = await encRes.json().catch(() => ({}));
+                const decoderFiles = (decData && decData.files) ? decData.files.map((f) => ({ ...f, url: f.url || ('/decoders/custom/' + f.name) })) : [];
+                const encoderFiles = (encData && encData.files) ? encData.files.map((f) => ({ ...f, url: f.url || ('/encoders/custom/' + f.name) })) : [];
+                const files = decoderFiles.concat(encoderFiles);
                 const report = { total: files.length, loaded: 0, failed: 0, failures: [] };
 
-                if (!res.ok) {
-                    setDecoderLoadStatus(`Custom decoders: failed to list (HTTP ${res.status}).`, true);
+                if (!decRes.ok && !encRes.ok) {
+                    setDecoderLoadStatus(`Custom decoders/encoders: failed to list.`, true);
                     lastCustomDecoderLoadReport = report;
                     return;
                 }
-                // Load in deterministic order
                 for (const f of files) {
                     if (!f || !f.url) continue;
-                    // cache-bust so updates show immediately
                     const v = (f.mtime !== undefined && f.mtime !== null) ? String(f.mtime) : String(Date.now());
                     try {
                         await loadScript(`${f.url}?v=${encodeURIComponent(v)}`);
@@ -1179,24 +1180,22 @@
                     } catch (e) {
                         report.failed += 1;
                         report.failures.push({ name: f.name || f.url, error: String(e) });
-                        // Continue loading remaining decoders even if one fails
-                        console.warn('Custom decoder load error:', f, e);
+                        console.warn('Custom script load error:', f, e);
                     }
                 }
 
                 lastCustomDecoderLoadReport = report;
                 const registered = (window.RBTDecoders && window.RBTDecoders.listDecoders) ? window.RBTDecoders.listDecoders().length : 0;
                 if (report.total === 0) {
-                    setDecoderLoadStatus(`Custom decoders: none installed. Registered decoders: ${registered}.`);
+                    setDecoderLoadStatus(`Custom decoders/encoders: none installed. Registered decoders: ${registered}.`);
                 } else if (report.failed > 0) {
-                    setDecoderLoadStatus(`Custom decoders: ${report.loaded}/${report.total} loaded, ${report.failed} failed. Registered decoders: ${registered}. (Check browser console for errors)`, true);
+                    setDecoderLoadStatus(`Custom: ${report.loaded}/${report.total} loaded, ${report.failed} failed. Registered decoders: ${registered}. (Check console for errors)`, true);
                 } else {
-                    setDecoderLoadStatus(`Custom decoders: ${report.loaded}/${report.total} loaded. Registered decoders: ${registered}.`);
+                    setDecoderLoadStatus(`Custom: ${report.loaded}/${report.total} loaded. Registered decoders: ${registered}.`);
                 }
             } catch (e) {
-                // Don't break the page if custom decoders can't load
-                console.warn('Custom decoder load failed:', e);
-                setDecoderLoadStatus(`Custom decoders: load failed (${String(e)}).`, true);
+                console.warn('Custom decoder/encoder load failed:', e);
+                setDecoderLoadStatus(`Custom scripts: load failed (${String(e)}).`, true);
             }
         }
 

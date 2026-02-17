@@ -177,15 +177,18 @@
             if (customDecodersLoaded) return;
             customDecodersLoaded = true;
             try {
-                const res = await fetch('/api/decoders/list');
-                const data = await res.json().catch(() => ({}));
-                const files = (data && data.files) ? data.files : [];
+                const [decRes, encRes] = await Promise.all([fetch('/api/decoders/list'), fetch('/api/encoders/list')]);
+                const decData = await decRes.json().catch(() => ({}));
+                const encData = await encRes.json().catch(() => ({}));
+                const decoderFiles = (decData && decData.files) ? decData.files.map((f) => ({ ...f, url: f.url || ('/decoders/custom/' + f.name) })) : [];
+                const encoderFiles = (encData && encData.files) ? encData.files.map((f) => ({ ...f, url: f.url || ('/encoders/custom/' + f.name) })) : [];
+                const files = decoderFiles.concat(encoderFiles);
                 for (const f of files) {
                     if (!f || !f.url) continue;
                     const v = (f.mtime != null) ? String(f.mtime) : String(Date.now());
-                    try { await loadScript(f.url + '?v=' + encodeURIComponent(v)); } catch (e) { console.warn('Custom decoder load:', e); }
+                    try { await loadScript(f.url + '?v=' + encodeURIComponent(v)); } catch (e) { console.warn('Custom script load:', e); }
                 }
-            } catch (e) { console.warn('Custom decoders:', e); }
+            } catch (e) { console.warn('Custom decoders/encoders:', e); }
         }
 
         function showStatus(kind, msg) {

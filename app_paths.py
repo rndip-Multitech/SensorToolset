@@ -18,6 +18,7 @@ _spec.loader.exec_module(_impl)
 
 get_app_root = _impl.get_app_root
 get_custom_decoders_dir = _impl.get_custom_decoders_dir
+get_custom_encoders_dir = _impl.get_custom_encoders_dir
 get_data_root = _impl.get_data_root
 get_config_dir = _impl.get_config_dir
 get_network_dashboard_py_dir = _impl.get_network_dashboard_py_dir

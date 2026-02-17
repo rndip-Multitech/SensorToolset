@@ -38,7 +38,7 @@ import base64
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from app_paths import get_app_root, get_custom_decoders_dir
+from app_paths import get_app_root, get_custom_decoders_dir, get_custom_encoders_dir
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -62,9 +62,11 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # Invalidate old browser sessions whenever the server process restarts.
 APP_BOOT_ID = str(int(time.time()))
 
-# Custom decoder storage (served as static files)
+# Custom decoder and encoder storage (separate dirs so same filename does not clash)
 CUSTOM_DECODER_DIR = get_custom_decoders_dir()
+CUSTOM_ENCODER_DIR = get_custom_encoders_dir()
 os.makedirs(CUSTOM_DECODER_DIR, exist_ok=True)
+os.makedirs(CUSTOM_ENCODER_DIR, exist_ok=True)
 
 
 def _is_safe_decoder_filename(name: str) -> bool:
@@ -79,8 +81,11 @@ def _is_safe_decoder_filename(name: str) -> bool:
 
 
 def _decoder_file_url(filename: str) -> str:
-    # Always serve via explicit route so custom decoders can live in a writable directory.
     return f"/decoders/custom/{filename}"
+
+
+def _encoder_file_url(filename: str) -> str:
+    return f"/encoders/custom/{filename}"
 
 
 @app.route('/static/<path:filename>')
@@ -591,6 +596,81 @@ def delete_decoder_route():
         return jsonify({"name": name}), 200
     except Exception as e:  # noqa: BLE001
         logger.error(f"Error deleting decoder: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# --- Custom encoders (separate directory so encoder and decoder with same name do not override) ---
+@app.route('/encoders/custom/<path:filename>')
+def serve_custom_encoder(filename):
+    """Serve custom encoder JS files from the writable encoder directory."""
+    if '..' in filename or filename.startswith('/'):
+        return "Invalid path", 403
+    if not _is_safe_decoder_filename(filename):
+        return "Invalid filename", 403
+    return send_from_directory(CUSTOM_ENCODER_DIR, filename)
+
+
+@app.route('/api/encoders/list', methods=['GET'])
+def list_encoders_route():
+    """List uploaded custom encoder JS files."""
+    try:
+        files = []
+        for fname in sorted(os.listdir(CUSTOM_ENCODER_DIR)):
+            if not _is_safe_decoder_filename(fname):
+                continue
+            path = os.path.join(CUSTOM_ENCODER_DIR, fname)
+            if not os.path.isfile(path):
+                continue
+            stat = os.stat(path)
+            files.append({
+                "name": fname,
+                "url": _encoder_file_url(fname),
+                "size": stat.st_size,
+                "mtime": int(stat.st_mtime),
+            })
+        return jsonify({"files": files}), 200
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error listing encoders: {e}")
+        return jsonify({"files": [], "error": str(e)}), 500
+
+
+@app.route('/api/encoders/save', methods=['POST'])
+def save_encoder_route():
+    """Save an encoder JS from text (JSON: {name, content})."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        name = secure_filename(str(data.get("name", "")).strip())
+        content = str(data.get("content", ""))
+        if not _is_safe_decoder_filename(name):
+            return jsonify({"error": "Invalid filename (must end with .js, no paths)"}), 400
+        if not content.strip():
+            return jsonify({"error": "Empty content"}), 400
+        dest = os.path.join(CUSTOM_ENCODER_DIR, name)
+        with open(dest, "w", encoding="utf-8") as f:
+            f.write(content)
+            if not content.endswith("\n"):
+                f.write("\n")
+        return jsonify({"name": name, "url": _encoder_file_url(name)}), 200
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error saving encoder: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/encoders/delete', methods=['POST'])
+def delete_encoder_route():
+    """Delete an encoder JS file (JSON: {name})."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        name = secure_filename(str(data.get("name", "")).strip())
+        if not _is_safe_decoder_filename(name):
+            return jsonify({"error": "Invalid filename"}), 400
+        dest = os.path.join(CUSTOM_ENCODER_DIR, name)
+        if not os.path.isfile(dest):
+            return jsonify({"error": "File not found"}), 404
+        os.remove(dest)
+        return jsonify({"name": name}), 200
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error deleting encoder: {e}")
         return jsonify({"error": str(e)}), 500
 
 

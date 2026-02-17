@@ -972,8 +972,19 @@
                     if (waterState) snapshot.water = { state: waterState };
                 }
                 if (!snapshot.tilt) {
-                    const rawAngle = pickNumber(decoded, ['tilt_angle', 'tilt_hp_angle']);
-                    if (rawAngle !== null || event === 'tilt' || event === 'hp_tilt') snapshot.tilt = { rawAngle };
+                    // Prefer high-precision 'angle' (degrees), then tilt_hp_angle, then low-res tilt_angle (0-255)
+                    const angleKeys = ['angle', 'tilt_hp_angle', 'tilt_angle'];
+                    let rawAngle = null;
+                    let isDegrees = false;
+                    for (let k = 0; k < angleKeys.length; k++) {
+                        const v = decoded[angleKeys[k]];
+                        if (typeof v === 'number' && isFinite(v)) {
+                            rawAngle = v;
+                            isDegrees = (angleKeys[k] === 'angle' || angleKeys[k] === 'tilt_hp_angle');
+                            break;
+                        }
+                    }
+                    if (rawAngle !== null || event === 'tilt' || event === 'hp_tilt') snapshot.tilt = { rawAngle, isDegrees };
                 }
                 if (!snapshot.movement) {
                     const abm = String(decoded.abm_event || '').toLowerCase();
@@ -2420,9 +2431,14 @@
                     html += `</div>`;
                     html += `<div class="sensor-visual-door-state ${isOpen ? 'open' : 'closed'}">${isOpen ? 'OPEN' : 'CLOSED'}</div>`;
                 } else if (type === 'tilt') {
-                    const rawAngle = (visualSnapshot.tilt && visualSnapshot.tilt.rawAngle != null) ? Number(visualSnapshot.tilt.rawAngle) : null;
-                    const deg = rawAngle != null ? Math.min(360, Math.max(0, (rawAngle / 255) * 360)) : null;
-                    const rotateDeg = deg != null ? (deg / 360) * 180 - 90 : 0;
+                    const t = visualSnapshot.tilt;
+                    const rawAngle = (t && t.rawAngle != null) ? Number(t.rawAngle) : null;
+                    const isDegrees = !!(t && t.isDegrees);
+                    const deg = rawAngle != null
+                        ? (isDegrees ? Math.min(360, Math.max(0, rawAngle)) : Math.min(360, Math.max(0, (rawAngle / 255) * 360)))
+                        : null;
+                    // Device: ~15° = vertical (mounted), 90° = flat. Needle: 0° = up, 90° = horizontal.
+                    const rotateDeg = deg != null ? Math.max(-15, Math.min(105, (deg - 15) * (90 / 75))) : 0;
                     html += `<div class="sensor-visual-title">Tilt Angle</div>`;
                     html += `<div class="sensor-visual-tilt-wrap">`;
                     html += `<div class="sensor-visual-tilt-needle" style="transform: translateX(-50%) rotate(${rotateDeg}deg);"></div>`;

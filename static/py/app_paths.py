@@ -80,6 +80,12 @@ def get_custom_decoders_dir() -> str:
     return p
 
 
+def get_custom_encoders_dir() -> str:
+    p = os.path.join(get_data_root(), "static", "js", "encoders", "custom")
+    os.makedirs(p, exist_ok=True)
+    return p
+
+
 def get_network_dashboard_py_dir() -> str:
     # This is needed for importing radiobridgev3.py (enhanced decoder)
     return os.path.join(get_app_root(), "static", "py")
