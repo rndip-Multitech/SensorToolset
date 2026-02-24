@@ -38,7 +38,7 @@ import base64
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from app_paths import get_app_root, get_custom_decoders_dir, get_custom_encoders_dir
+from app_paths import get_app_root, get_custom_decoders_dir, get_custom_encoders_dir, get_data_root
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -67,6 +67,9 @@ CUSTOM_DECODER_DIR = get_custom_decoders_dir()
 CUSTOM_ENCODER_DIR = get_custom_encoders_dir()
 os.makedirs(CUSTOM_DECODER_DIR, exist_ok=True)
 os.makedirs(CUSTOM_ENCODER_DIR, exist_ok=True)
+
+# Device name overrides (editable); gateway names come from /api/loraNetwork/whitelist or /api/lora/devices
+DEVICE_NAMES_FILE = os.path.join(get_data_root(), "device_names.json")
 
 
 def _is_safe_decoder_filename(name: str) -> bool:
@@ -402,6 +405,133 @@ def _normalize_dev_eui(entry):
     return None
 
 
+def _normalize_deveui_key(deveui: str) -> str:
+    """Normalize DevEUI for lookup: lowercase, no dashes."""
+    if not deveui or not isinstance(deveui, str):
+        return ""
+    return deveui.strip().lower().replace("-", "")
+
+
+def _extract_device_name(entry: dict) -> Optional[str]:
+    """Extract display name from a gateway device/whitelist entry."""
+    if not isinstance(entry, dict):
+        return None
+    for key in ("name", "deviceName", "Name", "label", "description", "device_name"):
+        val = entry.get(key)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _fetch_gateway_device_names(broker: str) -> Dict[str, str]:
+    """Fetch DevEUI -> name map from gateway (whitelist and/or lora/devices)."""
+    out: Dict[str, str] = {}
+    base = (broker or "localhost").strip().split("/")[0]
+    if not base.startswith("http"):
+        base = "http://" + base
+    base = base.rstrip("/")
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    # Try both whitelist and device list endpoints. On newer mPower the whitelist
+    # lives under /api/loraNetwork/whitelist/devices.
+    for path in (
+        "/api/loraNetwork/whitelist/devices",
+        "/api/loraNetwork/whitelist",
+        "/api/lora/devices",
+        "/api/lora/devices/",
+    ):
+        url = base + path
+        try:
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+                data = json.loads(body) if body.strip() else {}
+        except Exception:
+            continue
+        items = []
+        if isinstance(data, dict):
+            items = data.get("result") or data.get("devices") or data.get("whitelist") or data.get("list") or []
+        elif isinstance(data, list):
+            items = data
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            eui = _normalize_dev_eui(entry)
+            name = _extract_device_name(entry)
+            if eui and name:
+                key = _normalize_deveui_key(eui)
+                if key and key not in out:
+                    out[key] = name
+    return out
+
+
+def _load_device_name_overrides() -> Dict[str, str]:
+    """Load local device name overrides from JSON file."""
+    if not os.path.isfile(DEVICE_NAMES_FILE):
+        return {}
+    try:
+        with open(DEVICE_NAMES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str) and k and v.strip()}
+    except Exception as e:
+        logger.warning(f"Could not load device names overrides: {e}")
+    return {}
+
+
+def _save_device_name_overrides(overrides: Dict[str, str]) -> None:
+    """Save local device name overrides to JSON file."""
+    try:
+        with open(DEVICE_NAMES_FILE, "w", encoding="utf-8") as f:
+            json.dump(overrides, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save device names overrides: {e}")
+
+
+@app.route('/api/device-names', methods=['GET'])
+def get_device_names_route():
+    """Return DevEUI -> display name map (gateway + local overrides; overrides take precedence)."""
+    broker = (request.args.get("broker") or "localhost").strip()
+    names: Dict[str, str] = {}
+    try:
+        gateway = _fetch_gateway_device_names(broker)
+        names.update(gateway)
+    except Exception as e:
+        logger.debug(f"Gateway device names unavailable: {e}")
+    overrides = _load_device_name_overrides()
+    for k, v in overrides.items():
+        if k and v:
+            names[k] = v
+    return jsonify({"names": names}), 200
+
+
+@app.route('/api/device-names', methods=['POST'])
+def set_device_name_route():
+    """Set or clear a local display name override for a DevEUI. Body: { deveui, name }."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        deveui = (data.get("deveui") or "").strip()
+        name = (data.get("name") or "").strip()
+        if not deveui:
+            return jsonify({"error": "deveui required"}), 400
+        key = _normalize_deveui_key(deveui)
+        if not key:
+            return jsonify({"error": "invalid deveui"}), 400
+        overrides = _load_device_name_overrides()
+        if name:
+            overrides[key] = name
+        else:
+            overrides.pop(key, None)
+        _save_device_name_overrides(overrides)
+        return jsonify({"deveui": deveui, "name": name or None}), 200
+    except Exception as e:
+        logger.error(f"Set device name: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/network_sessions', methods=['GET'])
 def network_sessions_route():
     """Fetch connected sessions/devices from the gateway's LoRa network server API.
@@ -435,12 +565,24 @@ def network_sessions_route():
         items = []
     devices = []
     seen = set()
+    name_from_gateway = _extract_device_name
     for entry in items:
         dev_eui = _normalize_dev_eui(entry) if isinstance(entry, dict) else None
         if dev_eui and dev_eui not in seen:
             seen.add(dev_eui)
             last_seen = entry.get("last_seen", "") if isinstance(entry, dict) else ""
-            devices.append({"DevEUI": dev_eui, "last_seen": last_seen})
+            name = name_from_gateway(entry) if isinstance(entry, dict) else None
+            devices.append({"DevEUI": dev_eui, "last_seen": last_seen, "name": name})
+    # Merge with device-names API (gateway whitelist/devices + local overrides)
+    try:
+        names_map = _fetch_gateway_device_names("localhost")
+        names_map.update(_load_device_name_overrides())
+        for d in devices:
+            key = _normalize_deveui_key(d.get("DevEUI") or "")
+            if key and names_map.get(key):
+                d["name"] = names_map[key]
+    except Exception:
+        pass
     return jsonify({"devices": devices}), 200
 
 

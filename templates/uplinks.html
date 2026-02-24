@@ -415,6 +415,15 @@
         const DEFAULT_DECODER_KEY = 'rbt_default_decoder_id';
         const VIEW_MODE_KEY = 'rbt_uplinks_view_mode';
         const TEMP_UNIT_KEY = 'sensorTempUnit';
+        let uplinkDeviceNamesMap = {};
+        function deveuiToKey(d) { return (d || '').toLowerCase().replace(/-/g, ''); }
+        async function fetchUplinkDeviceNames() {
+            try {
+                const r = await fetch('/api/device-names');
+                const d = await r.json().catch(() => ({}));
+                uplinkDeviceNamesMap = d.names || {};
+            } catch (e) { uplinkDeviceNamesMap = {}; }
+        }
 
         function getTempUnit() {
             try {
@@ -839,6 +848,7 @@
             if (!sel) return;
             const prev = keepSelection ? (sel.value || '') : '';
             try {
+                await fetchUplinkDeviceNames();
                 const devs = await getCachedDevEUIs();
                 sel.innerHTML = '';
                 const optAll = document.createElement('option');
@@ -848,7 +858,8 @@
                 devs.forEach((d) => {
                     const opt = document.createElement('option');
                     opt.value = d;
-                    opt.textContent = d;
+                    const name = uplinkDeviceNamesMap[deveuiToKey(d)];
+                    opt.textContent = name ? (name + ' (' + d + ')') : d;
                     sel.appendChild(opt);
                 });
                 if (prev) sel.value = prev;
@@ -1131,9 +1142,9 @@
         }
         
         // Apply filters and refresh display
-        function applyFilters() {
+        async function applyFilters() {
             const filters = getActiveFilters();
-            displayCachedMessages(filters);
+            await displayCachedMessages(filters);
         }
 
         function setDecoderLoadStatus(text, isError = false) {
@@ -1466,6 +1477,7 @@
         // Display cached messages with filtering
         async function displayCachedMessages(filters = {}) {
             try {
+                await fetchUplinkDeviceNames();
                 const messages = await getCachedMessages(filters);
                 const messageTable = document.getElementById('messageTableBody');
                 messageTable.innerHTML = '';
@@ -1492,7 +1504,8 @@
                     timeCell.textContent = msg.time || 'N/A';
                     timeCell.style.textAlign = 'center';
                     
-                    devEUICell.textContent = msg.deveui || 'N/A';
+                    const devName = uplinkDeviceNamesMap[deveuiToKey(msg.deveui)];
+                    devEUICell.textContent = devName ? (devName + ' (' + (msg.deveui || '') + ')') : (msg.deveui || 'N/A');
                     devEUICell.style.textAlign = 'center';
                     
                     topicCell.textContent = msg.topic.substring(msg.topic.lastIndexOf('/') + 1);

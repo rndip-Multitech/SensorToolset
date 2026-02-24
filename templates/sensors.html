@@ -811,6 +811,7 @@
         let liveSyncInFlight = false;
         let lastRenderedMarker = '';
         let currentDevEUI = null;
+        let deviceNamesMap = {};
         let dateFilter = { from: null, to: null };
         let activeQuickRange = ''; // '1h'|'24h'|'7d'|'30d'|'all'|''
         const CHART_PREFS_KEY = 'sensorChartPrefs';
@@ -964,7 +965,10 @@
                 const state = String(decoded.state || '').toLowerCase();
 
                 if (!snapshot.door_window && (event === 'door_window' || event === 'contact' || state === 'open' || state === 'closed')) {
-                    const doorState = (state === 'open' || state === 'closed') ? state : null;
+                    let doorState = (state === 'open' || state === 'closed') ? state : null;
+                    if (!doorState && typeof decoded.door === 'boolean') doorState = decoded.door ? 'open' : 'closed';
+                    if (!doorState && decoded.TempDoorReport && typeof decoded.TempDoorReport.door === 'object' && decoded.TempDoorReport.door.value === true) doorState = 'open';
+                    if (!doorState && decoded.TempDoorReport && typeof decoded.TempDoorReport.door === 'object' && decoded.TempDoorReport.door.value === false) doorState = 'closed';
                     if (doorState) snapshot.door_window = { state: doorState };
                 }
                 if (!snapshot.water && (event === 'water' || state === 'wet' || state === 'dry')) {
@@ -1997,6 +2001,145 @@
             return chart;
         }
 
+        function createDoorWindowChart(canvasId, messages) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return null;
+
+            if (currentCharts[canvasId]) {
+                currentCharts[canvasId].destroy();
+            }
+
+            let filteredMessages = messages;
+            if (dateFilter.from || dateFilter.to) {
+                filteredMessages = filterMessagesByDate(messages, dateFilter.from, dateFilter.to);
+            }
+
+            const data = { open: [], closed: [] };
+            const labels = [];
+            let openCount = 0;
+            let closedCount = 0;
+            const maxPoints = 1000;
+
+            const sorted = filteredMessages.slice(0, maxPoints).reverse();
+            sorted.forEach(msg => {
+                const timestamp = new Date(msg.time);
+                const decoded = normalizeDecoded(msg.decoded || {});
+                const binary = extractBinaryValues(decoded);
+                labels.push(timestamp.toLocaleString());
+
+                let isOpen = null;
+                const state = String(decoded.state || '').toLowerCase();
+                if (state === 'open') isOpen = true;
+                else if (state === 'closed') isOpen = false;
+                if (isOpen === null && typeof decoded.door === 'boolean') isOpen = decoded.door;
+                if (isOpen === null && decoded.TempDoorReport && typeof decoded.TempDoorReport.door === 'object' && decoded.TempDoorReport.door.value !== undefined) {
+                    isOpen = !!decoded.TempDoorReport.door.value;
+                }
+                if (isOpen === null && (binary.door !== undefined || binary.state !== undefined || binary.contact !== undefined)) {
+                    const v = String(binary.door ?? binary.state ?? binary.contact ?? '').toLowerCase();
+                    if (v === 'open' || v === 'true' || v === '1') isOpen = true;
+                    else if (v === 'closed' || v === 'false' || v === '0') isOpen = false;
+                }
+                const eventStr = String(decoded.event || '').toLowerCase();
+                if (isOpen === null && (eventStr === 'door_window' || eventStr === 'contact') && state) {
+                    if (state === 'open') isOpen = true;
+                    else if (state === 'closed') isOpen = false;
+                }
+
+                if (isOpen === true) {
+                    data.open.push(1);
+                    data.closed.push(null);
+                    openCount++;
+                } else if (isOpen === false) {
+                    data.open.push(null);
+                    data.closed.push(1);
+                    closedCount++;
+                } else {
+                    data.open.push(null);
+                    data.closed.push(null);
+                }
+            });
+
+            const totalEvents = openCount + closedCount;
+            if (totalEvents === 0) return null;
+
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Open',
+                        data: data.open,
+                        borderColor: 'rgb(230, 81, 0)',
+                        backgroundColor: 'rgba(230, 81, 0, 0.15)',
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        spanGaps: true
+                    }, {
+                        label: 'Closed',
+                        data: data.closed,
+                        borderColor: 'rgb(21, 101, 192)',
+                        backgroundColor: 'rgba(21, 101, 192, 0.15)',
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        spanGaps: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Door / Window Events (Total: ${totalEvents} — Open: ${openCount}, Closed: ${closedCount})`,
+                            font: { size: 16, weight: 'bold' },
+                            color: '#333'
+                        },
+                        legend: { display: true, position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.parsed.y === 1) return context.dataset.label;
+                                    return '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1.2,
+                            ticks: { stepSize: 1, callback: function(v) { return v === 1 ? 'Event' : ''; } },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10,
+                                callback: function(value) {
+                                    const label = this.getLabelForValue(value);
+                                    if (!label) return '';
+                                    const date = new Date(label);
+                                    if (isNaN(date.getTime())) return label;
+                                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getDate().toString().padStart(2, '0');
+                                    const hours = date.getHours().toString().padStart(2, '0');
+                                    const minutes = date.getMinutes().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            currentCharts[canvasId] = chart;
+            return chart;
+        }
+
         async function renderSensorDashboard(deveui) {
             currentDevEUI = deveui;
             let allMessages = await getSensorMessages(deveui);
@@ -2213,6 +2356,16 @@
                 // Check for movement events
                 const hasMovementEvent = hasAbmEvent || hasAccelerationEvent || hasMovementInEvent;
                 
+                // Check for door/window (contact) events - open/closed state for graph
+                const eventStr = String(normalizedDecoded.event || '').toLowerCase();
+                const stateStr = String(normalizedDecoded.state || '').toLowerCase();
+                const hasDoorWindowEvent = normalizedDecoded && (
+                    eventStr === 'door_window' || eventStr === 'contact' ||
+                    stateStr === 'open' || stateStr === 'closed' ||
+                    normalizedDecoded.door !== undefined ||
+                    (normalizedDecoded.TempDoorReport && typeof normalizedDecoded.TempDoorReport.door === 'object' && normalizedDecoded.TempDoorReport.door.value !== undefined)
+                );
+                
                 // Check for any other graphable numeric values (but exclude metadata)
                 const hasOtherGraphableData = normalizedDecoded && Object.keys(normalizedDecoded).some(key => {
                     const keyLower = key.toLowerCase();
@@ -2228,7 +2381,7 @@
                            (typeof val === 'object' && val !== null && val.value !== undefined);
                 });
                 
-                const finalHasSensorData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent || hasOtherGraphableData;
+                const finalHasSensorData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent || hasDoorWindowEvent || hasOtherGraphableData;
                 
                 // Debug movement event detection
                 if (hasMovementEvent) {
@@ -2238,7 +2391,7 @@
                 
                 // Quick check for sensor data before extraction
                 // Include temperature event fields in the check
-                const quickCheckHasData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent ||
+                const quickCheckHasData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent || hasDoorWindowEvent ||
                     (normalizedDecoded && Object.keys(normalizedDecoded).some(k => {
                         const kLower = k.toLowerCase();
                         // Check for temperature fields (including event fields)
@@ -2354,9 +2507,14 @@
             }
             const isRadioBridge = isRadioBridgeSensor(messages, decoderId);
 
+            const deviceName = deviceNamesMap[deveuiToKey(deveui)];
+            const sensorTitle = deviceName ? (deviceName + ' (' + deveui + ')') : deveui;
             let html = `<div class="sensor-card">
                 <div class="sensor-header">
-                    <h3>Sensor: ${deveui}</h3>
+                    <h3 style="display:flex; align-items:center; gap: 8px; flex-wrap: wrap;">
+                        Sensor: <span id="sensorTitleLabel">${sensorTitle}</span>
+                        <button type="button" class="action-button" id="editDeviceNameBtn" data-deveui="${(deveui || '').replace(/"/g, '&quot;')}" style="font-size: 12px; padding: 4px 8px;" title="Set a display name for this device">Edit name</button>
+                    </h3>
                     <div style="display:flex; gap: 12px; align-items:center; flex-wrap: wrap; justify-content: flex-end;">
                         <span class="device-status-badge ${statusClass}" title="${status.detail}">
                             <span class="device-status-dot"></span>
@@ -2669,6 +2827,19 @@
             
             console.log('Movement detection:', hasMovement ? `Found in: ${movementFoundIn.join(', ')}` : 'No movement events found');
 
+            // Check for door/window (contact) events - open/closed for chart
+            const hasDoorWindow = messages.some((msg) => {
+                const decoded = normalizeDecoded(msg.decoded || {});
+                const eventStr = String(decoded.event || '').toLowerCase();
+                const stateStr = String(decoded.state || '').toLowerCase();
+                if (eventStr === 'door_window' || eventStr === 'contact' || stateStr === 'open' || stateStr === 'closed') return true;
+                if (decoded.door !== undefined) return true;
+                if (decoded.TempDoorReport && typeof decoded.TempDoorReport.door === 'object' && decoded.TempDoorReport.door.value !== undefined) return true;
+                const binary = extractBinaryValues(decoded);
+                const v = String(binary.door ?? binary.state ?? binary.contact ?? '').toLowerCase();
+                return v === 'open' || v === 'closed' || v === 'true' || v === 'false';
+            });
+
             // Sort fields for charts (Temperature first for Sensative Strips, then others)
             const sortedFields = Array.from(numericFields.entries());
             if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
@@ -2684,6 +2855,7 @@
             const hasSnr = signalData.length > 0 && signalData.some(s => s.snr !== undefined);
             const availableFields = [];
             if (hasMovement) availableFields.push('Movement');
+            if (hasDoorWindow) availableFields.push('Door/Window');
             sortedFields.forEach(([displayKey]) => {
                 if (displayKey.toLowerCase() !== 'rssi' && displayKey.toLowerCase() !== 'snr') {
                     availableFields.push(displayKey);
@@ -2707,7 +2879,7 @@
                 availableFields.forEach(field => {
                     const checked = isFieldEnabled(field);
                     const type = getChartType(field);
-                    const typeOptions = field === 'Movement' ? '' : `<select class="chart-type-select" data-field="${field.replace(/"/g, '&quot;')}"><option value="line"${type === 'line' ? ' selected' : ''}>Line</option><option value="bar"${type === 'bar' ? ' selected' : ''}>Bar</option></select>`;
+                    const typeOptions = (field === 'Movement' || field === 'Door/Window') ? '' : `<select class="chart-type-select" data-field="${field.replace(/"/g, '&quot;')}"><option value="line"${type === 'line' ? ' selected' : ''}>Line</option><option value="bar"${type === 'bar' ? ' selected' : ''}>Bar</option></select>`;
                     html += `<div class="chart-option-row" data-field="${field.replace(/"/g, '&quot;')}">`;
                     html += `<input type="checkbox" class="chart-option-check" data-field="${field.replace(/"/g, '&quot;')}" ${checked ? 'checked' : ''} id="chart_opt_${field.replace(/[^a-zA-Z0-9_]/g, '_')}_${deveui}">`;
                     html += `<label for="chart_opt_${field.replace(/[^a-zA-Z0-9_]/g, '_')}_${deveui}">${field.replace(/_/g, ' ')}</label>`;
@@ -2720,6 +2892,10 @@
             // Movement chart (if applicable) - FIRST
             if (hasMovement && isFieldEnabled('Movement')) {
                 html += `<div class="chart-container"><canvas id="chart_movement_${deveui}"></canvas></div>`;
+            }
+            // Door/Window events chart
+            if (hasDoorWindow && isFieldEnabled('Door/Window')) {
+                html += `<div class="chart-container"><canvas id="chart_doorwindow_${deveui}"></canvas></div>`;
             }
 
             // Numeric value charts (sensor data) - BEFORE signal quality
@@ -2742,8 +2918,8 @@
             html += `</div>`;
             
             // Debug: Log what we're about to render
-            console.log(`Rendering dashboard: ${numericFields.size} numeric fields, ${binaryFields.size} binary fields, ${signalData.length} signal data points, hasMovement: ${hasMovement}`);
-            if (numericFields.size === 0 && signalData.length === 0 && !hasMovement) {
+            console.log(`Rendering dashboard: ${numericFields.size} numeric fields, ${binaryFields.size} binary fields, ${signalData.length} signal data points, hasMovement: ${hasMovement}, hasDoorWindow: ${hasDoorWindow}`);
+            if (numericFields.size === 0 && signalData.length === 0 && !hasMovement && !hasDoorWindow) {
                 // Check if all messages were skipped due to being downlink_ack
                 const allDownlinkAck = messages.length > 0 && messages.every(msg => {
                     const originalEvent = msg.original && msg.original.data ? msg.original.data.event : null;
@@ -2782,6 +2958,9 @@
                 // Movement chart - FIRST (only if enabled)
                 if (hasMovement && isFieldEnabled('Movement')) {
                     createMovementChart(`chart_movement_${deveui}`, messages);
+                }
+                if (hasDoorWindow && isFieldEnabled('Door/Window')) {
+                    createDoorWindowChart(`chart_doorwindow_${deveui}`, messages);
                 }
 
                 // Numeric value charts (sensor data) - only enabled fields, use chosen chart type
@@ -2895,6 +3074,20 @@
             }, 100);
         }
 
+        function deveuiToKey(deveui) {
+            return (deveui || '').toLowerCase().replace(/-/g, '');
+        }
+        async function fetchDeviceNames() {
+            try {
+                const r = await fetch('/api/device-names');
+                const d = await r.json().catch(() => ({}));
+                deviceNamesMap = d.names || {};
+                return deviceNamesMap;
+            } catch (e) {
+                deviceNamesMap = {};
+                return {};
+            }
+        }
         async function populateSensorList() {
             const sensors = await getSensorList();
             const select = document.getElementById('sensorSelect');
@@ -2903,11 +3096,36 @@
             sensors.forEach(deveui => {
                 const opt = document.createElement('option');
                 opt.value = deveui;
-                opt.textContent = deveui;
+                const name = deviceNamesMap[deveuiToKey(deveui)];
+                opt.textContent = name ? (name + ' (' + deveui + ')') : deveui;
                 select.appendChild(opt);
             });
             if (previous && sensors.includes(previous)) {
                 select.value = previous;
+            }
+        }
+
+        async function editDeviceName(deveui) {
+            const key = deveuiToKey(deveui);
+            const current = deviceNamesMap[key] || '';
+            const name = prompt('Device name (leave empty to clear):', current);
+            if (name === null) return;
+            try {
+                const r = await fetch('/api/device-names', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deveui: deveui, name: (name || '').trim() })
+                });
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({}));
+                    alert(err.error || 'Failed to save name');
+                    return;
+                }
+                await fetchDeviceNames();
+                await populateSensorList();
+                if (currentDevEUI === deveui) await renderSensorDashboard(deveui);
+            } catch (e) {
+                alert('Error: ' + (e.message || e));
             }
         }
 
@@ -2952,9 +3170,20 @@
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 await initDB();
+                await fetchDeviceNames();
                 await syncPersistentCache(5000);
                 await populateSensorList();
                 startLiveSync();
+
+                const sensorContent = document.getElementById('sensorContent');
+                if (sensorContent) {
+                    sensorContent.addEventListener('click', function(e) {
+                        const btn = e.target && e.target.closest && e.target.closest('#editDeviceNameBtn');
+                        if (!btn) return;
+                        const deveui = btn.getAttribute('data-deveui');
+                        if (deveui) editDeviceName(deveui);
+                    });
+                }
 
                 document.getElementById('sensorSelect').addEventListener('change', function() {
                     const deveui = this.value;
@@ -2966,6 +3195,7 @@
                 });
 
                 document.getElementById('refreshBtn').addEventListener('click', async () => {
+                    await fetchDeviceNames();
                     await syncPersistentCache(5000);
                     await populateSensorList();
                     if (currentDevEUI) {

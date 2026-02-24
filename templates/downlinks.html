@@ -242,13 +242,13 @@
                 list.forEach(dev => {
                     const opt = document.createElement('option');
                     opt.value = dev.DevEUI;
-                    let label = dev.DevEUI;
+                    let label = (dev.name && dev.name.trim()) ? (dev.name.trim() + ' (' + dev.DevEUI + ')') : dev.DevEUI;
                     if (dev.last_seen) {
                         try {
                             const d = new Date(dev.last_seen);
-                            label += ' (last seen: ' + d.toLocaleString() + ')';
+                            label += ' · last seen: ' + d.toLocaleString();
                         } catch (e) {
-                            label += ' (last seen: ' + dev.last_seen + ')';
+                            label += ' · last seen: ' + dev.last_seen;
                         }
                     }
                     opt.textContent = label;
