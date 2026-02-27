@@ -68,6 +68,19 @@ CUSTOM_ENCODER_DIR = get_custom_encoders_dir()
 os.makedirs(CUSTOM_DECODER_DIR, exist_ok=True)
 os.makedirs(CUSTOM_ENCODER_DIR, exist_ok=True)
 
+RADIOBRIDGE_UPSTREAM_FILENAME = "radiobridge_upstream.js"
+RADIOBRIDGE_META_FILENAME = "radiobridge_decoder_meta.json"
+
+
+def _write_atomic(path: str, content: str) -> None:
+    """Atomically write text content to a file (via temp file + replace)."""
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(content)
+        if not content.endswith("\n"):
+            f.write("\n")
+    os.replace(tmp_path, path)
+
 # Device name overrides (editable); gateway names come from /api/loraNetwork/whitelist or /api/lora/devices
 DEVICE_NAMES_FILE = os.path.join(get_data_root(), "device_names.json")
 
@@ -143,8 +156,26 @@ except ImportError as e:
 config = {
     'host': '0.0.0.0',
     'port': 5000,
-    'debug': False
+    'debug': False,
+    # RadioBridge decoder bundle URL (optional). If set, "Update Radiobridge library" will fetch from it.
+    # Override via RADIOBRIDGE_DECODER_URL env var or config file key "radiobridge_decoder_url".
+    # Leave empty until you have a real URL to avoid 502 errors.
+    'radiobridge_decoder_url': '',
 }
+
+
+def _get_radiobridge_decoder_url() -> str:
+    """
+    Effective RadioBridge decoder URL.
+
+    Precedence:
+    1. RADIOBRIDGE_DECODER_URL environment variable (if set, non-empty)
+    2. config['radiobridge_decoder_url'] from defaults or JSON config file
+    """
+    env_val = os.environ.get("RADIOBRIDGE_DECODER_URL", "").strip()
+    if env_val:
+        return env_val
+    return str(config.get("radiobridge_decoder_url") or "").strip()
 
 def _gateway_base_url(broker):
     """Gateway HTTP base URL from broker host (no port — uses default HTTP port)."""
@@ -741,6 +772,79 @@ def delete_decoder_route():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/decoders/radiobridge/update', methods=['POST'])
+def update_radiobridge_decoder_route():
+    """Fetch the latest RadioBridge decoder bundle from a configured URL and save it under CUSTOM_DECODER_DIR.
+
+    Uses RADIOBRIDGE_DECODER_URL env var if set, otherwise config['radiobridge_decoder_url'].
+    Writes JS to RADIOBRIDGE_UPSTREAM_FILENAME and metadata to RADIOBRIDGE_META_FILENAME.
+    """
+    url = _get_radiobridge_decoder_url()
+    if not url:
+        return jsonify({"ok": False, "error": "Radiobridge decoder URL is not configured."}), 500
+
+    url = url.strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        return jsonify({"ok": False, "error": "Radiobridge decoder URL must start with http:// or https://"}), 400
+
+    logger.info("Updating RadioBridge decoder from %s", url)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "SensorToolkit/RadioBridgeUpdater"})
+        # Use default SSL context; caller can configure system certificates as needed.
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            status = getattr(resp, "status", None)
+            if status is not None and status != 200:
+                return jsonify({"ok": False, "error": f"Upstream returned HTTP {status}"}), 502
+            raw_bytes = resp.read()
+            if not raw_bytes:
+                return jsonify({"ok": False, "error": "Received empty decoder bundle"}), 502
+            try:
+                content = raw_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                # Fallback with replacement characters
+                content = raw_bytes.decode("utf-8", errors="replace")
+            if not content.strip():
+                return jsonify({"ok": False, "error": "Received decoder bundle with no text content"}), 502
+
+            js_path = os.path.join(CUSTOM_DECODER_DIR, RADIOBRIDGE_UPSTREAM_FILENAME)
+            meta_path = os.path.join(CUSTOM_DECODER_DIR, RADIOBRIDGE_META_FILENAME)
+
+            # Best-effort basic validation: ensure it at least looks like JS
+            if "function" not in content and "=>" not in content and "RBRadioBridgeCore" not in content:
+                logger.warning("Radiobridge bundle fetched from %s does not look like JS; aborting update.", url)
+                return jsonify({"ok": False, "error": "Decoder bundle does not look like JavaScript"}), 502
+
+            # Atomic write of JS and metadata
+            _write_atomic(js_path, content)
+
+            meta = {
+                "source_url": url,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "bytes": len(raw_bytes),
+                "encoding": "utf-8",
+                "etag": getattr(resp, "headers", {}).get("ETag") if hasattr(resp, "headers") else None,
+                "last_modified": getattr(resp, "headers", {}).get("Last-Modified") if hasattr(resp, "headers") else None,
+            }
+            _write_atomic(meta_path, json.dumps(meta, indent=2))
+
+            logger.info(
+                "Updated RadioBridge decoder bundle at %s (%d bytes)",
+                js_path,
+                len(raw_bytes),
+            )
+            return jsonify({"ok": True, "meta": meta}), 200
+    except urllib.error.HTTPError as e:
+        logger.error("Failed to update RadioBridge decoder (HTTPError): %s", e)
+        return jsonify({"ok": False, "error": f"HTTP error from upstream: {e.code}"}), 502
+    except urllib.error.URLError as e:
+        logger.error("Failed to update RadioBridge decoder (URLError): %s", e)
+        reason = getattr(e, "reason", None)
+        return jsonify({"ok": False, "error": str(reason or e)}), 502
+    except Exception as e:  # noqa: BLE001
+        logger.error("Failed to update RadioBridge decoder: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # --- Custom encoders (separate directory so encoder and decoder with same name do not override) ---
 @app.route('/encoders/custom/<path:filename>')
 def serve_custom_encoder(filename):
@@ -814,6 +918,21 @@ def delete_encoder_route():
     except Exception as e:  # noqa: BLE001
         logger.error(f"Error deleting encoder: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/decoders/radiobridge/metadata', methods=['GET'])
+def get_radiobridge_decoder_metadata_route():
+    """Return metadata about the currently installed RadioBridge decoder bundle (if any)."""
+    meta_path = os.path.join(CUSTOM_DECODER_DIR, RADIOBRIDGE_META_FILENAME)
+    if not os.path.isfile(meta_path):
+        return jsonify({"ok": False, "meta": None}), 200
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        return jsonify({"ok": True, "meta": meta}), 200
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Could not read RadioBridge decoder metadata: %s", e)
+        return jsonify({"ok": False, "meta": None, "error": str(e)}), 200
 
 
 # --- Cloud Integrations API ---

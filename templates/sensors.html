@@ -730,8 +730,8 @@
                     <a href="sensors.html">Sensor Monitor</a>
                 </li>
                 <li class="item">
-                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
-                    <a href="decoders.html">Decoders</a>
+                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Sensor Library">
+                    <a href="decoders.html">Sensor Library</a>
                 </li>
                 <li class="item">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
@@ -964,7 +964,9 @@
                 const event = String(decoded.event || '').toLowerCase();
                 const state = String(decoded.state || '').toLowerCase();
 
-                if (!snapshot.door_window && (event === 'door_window' || event === 'contact' || state === 'open' || state === 'closed')) {
+                // Do not treat as door/window when this message is clearly movement/ABM (avoids showing door animation on movement sensors)
+                const isMovementMessage = event === 'acceleration' || (decoded.abm_event !== undefined && decoded.abm_event !== null && String(decoded.abm_event).trim() !== '');
+                if (!snapshot.door_window && !isMovementMessage && (event === 'door_window' || event === 'contact' || state === 'open' || state === 'closed')) {
                     let doorState = (state === 'open' || state === 'closed') ? state : null;
                     if (!doorState && typeof decoded.door === 'boolean') doorState = decoded.door ? 'open' : 'closed';
                     if (!doorState && decoded.TempDoorReport && typeof decoded.TempDoorReport.door === 'object' && decoded.TempDoorReport.door.value === true) doorState = 'open';

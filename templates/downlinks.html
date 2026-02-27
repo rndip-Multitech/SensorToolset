@@ -30,6 +30,14 @@
         .status-indicator { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
         .status-connected { background-color: #4caf50; }
         .status-disconnected { background-color: #9e9e9e; }
+        .panel h3.title-with-help { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .panel h3.title-with-help .help-button {
+            width: 20px; height: 20px; min-width: 20px; min-height: 20px;
+            padding: 0; margin: 0; border-radius: 50%;
+            font-size: 12px; line-height: 1; font-weight: 600;
+            display: inline-flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
@@ -50,7 +58,7 @@
                 <li class="item active"><img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks"><a href="downlinks.html">Send Downlinks</a></li>
                 <li class="item"><img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge"><a href="radiobridge.html">RadioBridge Config</a></li>
                 <li class="item"><img src="/static/icons/bar-chart.svg" width="24" height="24" class="icon-margin" alt="Sensor Monitor"><a href="sensors.html">Sensor Monitor</a></li>
-                <li class="item"><img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders"><a href="decoders.html">Decoders</a></li>
+                <li class="item"><img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Sensor Library"><a href="decoders.html">Sensor Library</a></li>
                 <li class="item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg><a href="cloud_integrations.html">Cloud Integrations</a></li>
             </ul>
         </div>
@@ -63,36 +71,15 @@
         <div class="container">
             <h2 class="section-title">Send Downlinks</h2>
             <p style="margin: 6px 0 14px; color: #666; font-size: 13px;">
-                Connect to your broker, select a device, then send either an encoder-built payload or a raw hex/base64 payload.
+                This page connects to the MQTT broker automatically. Select a device, then send either an encoder-built payload or a raw hex/base64 payload.
             </p>
 
-            <div class="panel">
-                <h3>Connection</h3>
-                <form id="connectForm">
-                    <div class="form-group">
-                        <label for="broker">MQTT Broker IP:</label>
-                        <input type="text" id="broker" name="broker" value="127.0.0.1" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="port">Port:</label>
-                        <input type="number" id="port" name="port" value="1883" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="topic">Downlink Topic Pattern:</label>
-                        <input type="text" id="topic" name="topic" value="lora/{deveui}/down" required>
-                    </div>
-                    <button type="submit" class="action-button">Connect</button>
-                    <span id="connectionStatus" style="margin-left: 10px;">
-                        <span class="status-indicator status-disconnected"></span>
-                        <span>Disconnected</span>
-                    </span>
-                </form>
-            </div>
+            <div id="status" class="status"></div>
 
             <div class="panel">
                 <h3>Device</h3>
                 <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
-                    Device list is loaded from active network sessions after you connect.
+                    Device list is loaded from active network sessions once the broker connection is ready.
                 </p>
                 <div class="form-group">
                     <label for="deviceSelect">Device (DevEUI):</label>
@@ -103,7 +90,7 @@
             </div>
 
             <div class="panel">
-                <h3>Downlink mode <button type="button" class="help-button" onclick="alert('Build from encoder: use a codec (RadioBridge or third-party) to build a downlink from parameters.\n\nRaw hex/base64: send a raw payload as hex or base64 and specify the port. Enter either hex or base64; the other is ignored if both are set (hex takes precedence).')" title="Help">?</button></h3>
+                <h3 class="title-with-help">Downlink mode <button type="button" class="help-button" onclick="alert('Build from encoder: use a codec (RadioBridge or third-party) to build a downlink from parameters.\n\nRaw hex/base64: send a raw payload as hex or base64 and specify the port. Enter either hex or base64; the other is ignored if both are set (hex takes precedence).')" title="Help">?</button></h3>
                 <div class="mode-tabs">
                     <button type="button" id="tabEncoder" class="active">Build from encoder</button>
                     <button type="button" id="tabRaw">Raw hex / base64</button>
@@ -148,8 +135,6 @@
                 </div>
             </div>
 
-            <div id="status" class="status"></div>
-
             <!-- Downlink queue UI removed (gateway downlink queue API not reliable/consistent across deployments) -->
         </div>
     </section>
@@ -161,6 +146,9 @@
     <script>
         let customDecodersLoaded = false;
         let brokerIp = '';
+        const DEFAULT_BROKER = '127.0.0.1';
+        const DEFAULT_PORT = 1883;
+        const DEFAULT_TOPIC_PATTERN = 'lora/{deveui}/down';
 
         function loadScript(src) {
             return new Promise((resolve, reject) => {
@@ -201,11 +189,10 @@
             document.getElementById('status').style.display = 'none';
         }
 
-        function connectToBroker(e) {
-            if (e) e.preventDefault();
-            const broker = document.getElementById('broker').value;
-            const port = document.getElementById('port').value;
-            const topic = document.getElementById('topic').value;
+        function connectToBroker() {
+            const broker = DEFAULT_BROKER;
+            const port = DEFAULT_PORT;
+            const topic = DEFAULT_TOPIC_PATTERN;
             fetch('/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broker, port, topic }) })
                 .then(r => r.json())
                 .then(data => {
@@ -438,8 +425,7 @@
                     base64 = btoa(String.fromCharCode(...bytes));
                 }
                 if (!base64) { showStatus('err', 'Encoder returned empty payload.'); return; }
-                const topicPattern = document.getElementById('topic').value || 'lora/{deveui}/down';
-                const topic = topicPattern.replace('{deveui}', devEui.replace(/-/g, ''));
+                const topic = DEFAULT_TOPIC_PATTERN.replace('{deveui}', devEui.replace(/-/g, ''));
                 const res = await fetch('/send_downlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, data: base64, port, broker: brokerIp || undefined }) });
                 const data = await res.json().catch(() => ({}));
                 if (data.error) showStatus('err', data.error);
@@ -465,8 +451,7 @@
             } else {
                 showStatus('err', 'Enter hex or base64 payload.'); return;
             }
-            const topicPattern = document.getElementById('topic').value || 'lora/{deveui}/down';
-            const topic = topicPattern.replace('{deveui}', devEui.replace(/-/g, ''));
+            const topic = DEFAULT_TOPIC_PATTERN.replace('{deveui}', devEui.replace(/-/g, ''));
             try {
                 const res = await fetch('/send_downlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, data: base64, port, broker: brokerIp || undefined }) });
                 const data = await res.json().catch(() => ({}));
@@ -482,7 +467,7 @@
             }
         }
 
-        document.getElementById('connectForm').addEventListener('submit', connectToBroker);
+        connectToBroker();
         document.getElementById('codecSelect').addEventListener('change', () => { populateEncoders(); renderEncoderParams(); });
         document.getElementById('encoderSelect').addEventListener('change', renderEncoderParams);
         document.getElementById('sendEncoderBtn').addEventListener('click', sendEncoderDownlink);

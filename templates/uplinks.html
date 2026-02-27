@@ -9,7 +9,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 0;
         }
 
         th, td {
@@ -34,12 +34,38 @@
         }
 
         .form-section {
-            margin-bottom: 20px;
-            padding: 15px;
+            margin-bottom: 12px;
+            padding: 10px 12px;
             background-color: #fafafa;
             border: 1px solid #e0e0e0;
             border-radius: 4px;
         }
+
+        .form-section .connect-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 16px;
+        }
+
+        .form-section .connect-row label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #00394d;
+            margin: 0;
+        }
+
+        .form-section .connect-row input {
+            padding: 5px 8px;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'PoppinsFont', Gotham, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        .form-section .connect-row .conn-broker { width: 120px; }
+        .form-section .connect-row .conn-port { width: 70px; }
+        .form-section .connect-row .conn-topic { flex: 1; min-width: 140px; }
 
         .form-group {
             display: flex;
@@ -64,8 +90,8 @@
         }
 
         .filter-section {
-            margin: 20px 0;
-            padding: 15px;
+            margin: 12px 0;
+            padding: 10px 12px;
             background-color: #fafafa;
             border: 1px solid #e0e0e0;
             border-radius: 4px;
@@ -86,6 +112,36 @@
             border-radius: 4px;
             font-family: 'PoppinsFont', Gotham, 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 16px;
+            margin-bottom: 6px;
+        }
+        .filter-row:last-of-type { margin-bottom: 0; }
+        .filter-row label {
+            margin: 0;
+            min-width: auto;
+            font-size: 12px;
+        }
+        .filter-row input[type="text"],
+        .filter-row input[type="datetime-local"],
+        .filter-row select {
+            padding: 5px 8px;
+            font-size: 12px;
+            max-width: none;
+        }
+        .filter-row .filter-search { flex: 1; min-width: 140px; }
+        .filter-row .filter-deveui { width: 160px; min-width: 120px; }
+        .filter-row .filter-event { width: 140px; min-width: 100px; }
+        .filter-row .filter-date { width: 165px; }
+        .filter-row .filter-view { width: 100px; }
+        .filter-row .filter-temp { display: inline-flex; align-items: center; gap: 4px; }
+        .filter-row .filter-temp label { font-weight: normal; cursor: pointer; }
+        .filter-row .filter-decoder { min-width: 120px; }
+        .filter-tip { margin-top: 6px; color: #666; font-size: 11px; }
 
         .message-data {
             font-size: 12px;
@@ -257,8 +313,8 @@
                     <a href="sensors.html">Sensor Monitor</a>
                 </li>
                 <li class="item">
-                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
-                    <a href="decoders.html">Decoders</a>
+                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Sensor Library">
+                    <a href="decoders.html">Sensor Library</a>
                 </li>
                 <li class="item">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
@@ -277,99 +333,72 @@
     <section>
         <div class="container">
             <div id="notification" style="display: none; position: fixed; top: 20px; right: 20px; background-color: #4caf50; color: white; padding: 15px 20px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 1000;"></div>
-            <h2 class="section-title">Connect to MultiTech Gateway</h2>
             <div class="form-section">
-                <!-- Use both inline onsubmit and a JS event listener.
-                     Both call the same (overridden) global connectToBroker, so either path works
-                     even if one wiring mechanism fails on some browsers/environments. -->
                 <form id="connectForm" onsubmit="connectToBroker(event)">
-                    <div class="form-group">
-                        <label for="broker">MQTT Broker IP:</label>
-                        <input type="text" id="broker" name="broker" value="127.0.0.1" required>
+                    <div class="connect-row">
+                        <span style="font-weight: bold; color: #00394d; font-size: 14px;">MQTT</span>
+                        <label for="broker">Broker</label>
+                        <input type="text" id="broker" name="broker" class="conn-broker" value="127.0.0.1" required placeholder="IP">
+                        <label for="port">Port</label>
+                        <input type="number" id="port" name="port" class="conn-port" value="1883" required>
+                        <label for="topic">Topic</label>
+                        <input type="text" id="topic" name="topic" class="conn-topic" value="lora/+/up" required>
+                        <button type="submit" class="action-button">Connect</button>
+                        <span id="connectionStatus" style="margin-left: 4px;">
+                            <span class="status-indicator status-disconnected"></span>
+                            <span>Disconnected</span>
+                        </span>
                     </div>
-                    <div class="form-group">
-                        <label for="port">Port:</label>
-                        <input type="number" id="port" name="port" value="1883" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="topic">Topic:</label>
-                        <input type="text" id="topic" name="topic" value="lora/+/up" required>
-                    </div>
-                    <button type="submit">Connect</button>
-                    <span id="connectionStatus" style="margin-left: 10px;">
-                        <span class="status-indicator status-disconnected"></span>
-                        <span>Disconnected</span>
-                    </span>
                 </form>
             </div>
 
             <div class="filter-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <h3 style="margin: 0; color: #00394d;">Filters & Cache</h3>
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button type="button" class="action-button" id="uploadHistoryBtn" title="Import packet history from gateway JSON export">Import history</button>
+                <div class="filter-row" style="justify-content: space-between;">
+                    <span style="font-weight: bold; color: #00394d; font-size: 14px;">Filters & Cache</span>
+                    <span id="cacheStats" style="color: #666; font-size: 12px;">Cached messages: 0</span>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                        <button type="button" class="action-button" id="uploadHistoryBtn" title="Import packet history from gateway JSON export">Import</button>
                         <input type="file" id="uploadHistoryInput" accept=".json,application/json" style="display: none;">
-                        <button type="button" class="action-button" id="downloadCSVBtn">Download CSV</button>
-                        <button type="button" class="action-button" id="downloadJSONBtn">Download JSON</button>
-                        <button type="button" class="action-button" id="clearCacheBtn">Clear Cache</button>
+                        <button type="button" class="action-button" id="downloadCSVBtn">CSV</button>
+                        <button type="button" class="action-button" id="downloadJSONBtn">JSON</button>
+                        <button type="button" class="action-button" id="clearCacheBtn">Clear</button>
                     </div>
                 </div>
-                <div id="cacheStats" style="margin-bottom: 12px; color: #666; font-size: 12px;">Cached messages: 0</div>
-                
-                <div class="form-group" style="margin-bottom: 10px;">
-                    <label for="filter" style="min-width: 120px;">Search:</label>
-                    <input type="text" id="filter" name="filter" placeholder="Search for messages..." style="flex: 1; max-width: none;">
-                </div>
-                
-                <div class="form-group" style="margin-bottom: 10px;">
-                    <label for="filterDevEui" style="min-width: 120px;">DevEUI:</label>
-                    <select id="filterDevEui" name="filterDevEui" class="decoder-select" style="flex: 1; max-width: none;" title="Filter to a single DevEUI (populated from cached messages)">
-                        <option value="">-- All devices --</option>
+                <div class="filter-row">
+                    <label for="filter">Search</label>
+                    <input type="text" id="filter" name="filter" class="filter-search" placeholder="Search...">
+                    <label for="filterDevEui">DevEUI</label>
+                    <select id="filterDevEui" name="filterDevEui" class="decoder-select filter-deveui" title="Filter to one DevEUI">
+                        <option value="">-- All --</option>
                     </select>
+                    <label for="filterEventType">Event</label>
+                    <input type="text" id="filterEventType" name="filterEventType" class="filter-event" placeholder="Event type...">
                 </div>
-                
-                <div class="form-group" style="margin-bottom: 10px;">
-                    <label for="filterEventType" style="min-width: 120px;">Event Type:</label>
-                    <input type="text" id="filterEventType" name="filterEventType" placeholder="Filter by event type..." style="flex: 1; max-width: none;">
+                <div class="filter-row">
+                    <label for="filterDateFrom">From</label>
+                    <input type="datetime-local" id="filterDateFrom" name="filterDateFrom" class="filter-date">
+                    <label for="filterDateTo">To</label>
+                    <input type="datetime-local" id="filterDateTo" name="filterDateTo" class="filter-date">
                 </div>
-                
-                <div class="form-group" style="margin-bottom: 10px;">
-                    <label for="filterDateFrom" style="min-width: 120px;">From Date:</label>
-                    <input type="datetime-local" id="filterDateFrom" name="filterDateFrom" style="flex: 1; max-width: 300px;">
-                    <label for="filterDateTo" style="min-width: 80px; margin-left: 12px;">To:</label>
-                    <input type="datetime-local" id="filterDateTo" name="filterDateTo" style="flex: 1; max-width: 300px;">
-                </div>
-
-                <div class="form-group" style="margin-top: 12px;">
-                    <label for="viewMode">View:</label>
-                    <select id="viewMode" class="decoder-select" title="How to display message data">
+                <div class="filter-row">
+                    <label for="viewMode">View</label>
+                    <select id="viewMode" class="decoder-select filter-view" title="Decoded = human-readable. Raw = payload + metadata.">
                         <option value="decoded">Decoded</option>
                         <option value="raw">Raw</option>
                         <option value="both">Both</option>
                     </select>
-                    <span style="color:#666; font-size: 12px;">
-                        Decoded = human-readable fields. Raw = payload hex/base64 + metadata.
-                    </span>
-                </div>
-                <div class="form-group" style="margin-top: 8px;">
-                    <span style="font-weight: bold;">Temperature:</span>
-                    <label style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; cursor: pointer;"><input type="radio" name="tempUnitUplinks" value="C"> °C</label>
-                    <label style="display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; cursor: pointer;"><input type="radio" name="tempUnitUplinks" value="F"> °F</label>
-                    <span style="color:#666; font-size: 12px; margin-left: 8px;">Applies to decoded view and CSV/JSON export.</span>
-                </div>
-                <div class="form-group" style="margin-top: 12px;">
-                    <label for="defaultDecoder">Default decoder:</label>
-                    <select id="defaultDecoder" class="decoder-select"></select>
+                    <span class="filter-temp" style="margin-left: 4px;"><strong style="font-size: 12px;">Temp</strong></span>
+                    <label class="filter-temp"><input type="radio" name="tempUnitUplinks" value="C"> °C</label>
+                    <label class="filter-temp"><input type="radio" name="tempUnitUplinks" value="F"> °F</label>
+                    <label for="defaultDecoder" style="margin-left: 8px;">Decoder</label>
+                    <select id="defaultDecoder" class="decoder-select filter-decoder"></select>
                     <button type="button" class="action-button" id="clearDecoderMap">Clear per-device</button>
-                    <button type="button" class="action-button" id="reloadDecoders">Reload decoders</button>
+                    <button type="button" class="action-button" id="reloadDecoders">Reload</button>
                 </div>
-                <p style="margin-top: 6px; color: #666;">
-                    Tip: Use the decoder dropdown in each row (Actions) to pin a decoder per DevEUI.
-                </p>
-                <div id="decoderLoadStatus" style="margin-top: 8px; color: #666; font-size: 12px;"></div>
+                <p class="filter-tip">Tip: Use the decoder dropdown in each row (Actions) to pin a decoder per DevEUI. <span id="decoderLoadStatus"></span></p>
             </div>
 
-            <h2 class="section-title">Uplink Messages</h2>
+            <h2 class="section-title" style="margin-top: 14px; margin-bottom: 8px;">Uplink Messages</h2>
             <table>
                 <thead>
                     <tr>

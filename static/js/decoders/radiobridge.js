@@ -350,7 +350,7 @@
     return out;
   }
 
-  function decodeRadioBridgeBytes(bytes) {
+  function decodeRadioBridgeBytesLocal(bytes) {
     const out = {};
     addHeaderFields(out, bytes);
     if (!bytes || bytes.length < 2) {
@@ -865,6 +865,22 @@
     }
   ];
 
+  function decodeRadioBridgeBytes(bytes) {
+    if (window.RBRadioBridgeCore && typeof window.RBRadioBridgeCore.decode === 'function') {
+      try {
+        var upstream = window.RBRadioBridgeCore.decode(bytes);
+        if (upstream && typeof upstream === 'object') {
+          return upstream;
+        }
+      } catch (e) {
+        if (window.console && console.warn) {
+          console.warn('Radiobridge upstream decode failed, falling back to built-in decoder:', e);
+        }
+      }
+    }
+    return decodeRadioBridgeBytesLocal(bytes);
+  }
+
   window.RBTDecoders.registerDecoder({
     id: 'radiobridge_js',
     name: 'RadioBridge (JS)',
@@ -883,7 +899,9 @@
       decoded.payload_len = bytes ? bytes.length : 0;
       return window.RBTDecoders.normalizeDecodedOutput(decoded);
     },
-    encoders: radioBridgeEncoders,
+    encoders: (window.RBRadioBridgeCore && Array.isArray(window.RBRadioBridgeCore.encoders) && window.RBRadioBridgeCore.encoders.length
+      ? window.RBRadioBridgeCore.encoders
+      : radioBridgeEncoders),
   });
 })();
 

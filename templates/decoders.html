@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Decoders</title>
+    <title>Sensor Library</title>
     <link rel="stylesheet" href="/static/styles.css">
     <style>
         .panel {
@@ -82,6 +82,82 @@
             border-radius: 4px;
             background: white;
         }
+        .sensor-library-heading {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #374151;
+            margin: 24px 0 0;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .tabs-wrap {
+            margin-top: 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px 6px 0 0;
+            background: #f5f5f5;
+        }
+        .tabs {
+            display: flex;
+            gap: 0;
+            padding: 0 12px 0 0;
+            border-bottom: 1px solid #e0e0e0;
+            background: #e8e8e8;
+            border-radius: 6px 6px 0 0;
+        }
+        .tab-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            background: transparent;
+            padding: 12px 18px;
+            font-size: 13px;
+            color: #555;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            margin-bottom: -1px;
+        }
+        .tab-button:hover {
+            background: rgba(255,255,255,0.5);
+            color: #111827;
+        }
+        .tab-button.active {
+            background: #ffffff;
+            color: #00394d;
+            border: 1px solid #e0e0e0;
+            border-bottom: 1px solid #ffffff;
+        }
+        .tab-icon {
+            flex-shrink: 0;
+            opacity: 0.85;
+        }
+        .tab-button.active .tab-icon {
+            opacity: 1;
+        }
+        .tab-panels {
+            margin-top: 0;
+            padding: 0;
+            border: 1px solid #e0e0e0;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            background: #fff;
+        }
+        .tab-panel {
+            display: none;
+            padding: 20px;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+        .sensor-library-footer {
+            margin-top: 24px;
+        }
+        .test-js-editor {
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -89,7 +165,7 @@
         <div class="container">
             <div class="my-logo">
                 <img src="MultiTech_Logo.png" alt="MultiTech Logo">
-                <h1>Decoder Management</h1>
+                <h1>Sensor Library</h1>
             </div>
         </div>
     </header>
@@ -118,8 +194,8 @@
                     <a href="sensors.html">Sensor Monitor</a>
                 </li>
                 <li class="item">
-                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Decoders">
-                    <a href="decoders.html">Decoders</a>
+                    <img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Sensor Library">
+                    <a href="decoders.html">Sensor Library</a>
                 </li>
                 <li class="item">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;">
@@ -137,120 +213,173 @@
 
     <section>
         <div class="container">
-            <h2 class="section-title">Add / Edit Decoder (JavaScript)</h2>
+            <h2 class="section-title">Sensor Library</h2>
             <p style="margin: 6px 0 14px; color: #666; font-size: 13px;">
                 Upload or paste JavaScript decoders/encoders. Saved decoders are used on Uplinks; encoders appear in Send Downlinks.
             </p>
 
-            <div class="panel">
-                <h3>Upload decoder or encoder file</h3>
-                <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
-                    Upload a `.js` file and the app will auto-detect decoder/encoder format.
-                </p>
-                <div class="row">
-                    <input type="file" id="decoderFile" accept=".js">
-                    <button class="action-button" id="uploadBtn" type="button">Upload</button>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h3>Add encoder separately</h3>
-                <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
-                    Use this when you only need encoder logic (no uplink decoder).
-                </p>
-                <div class="row">
-                    <input type="file" id="encoderFile" accept=".js">
-                    <button class="action-button" id="uploadEncoderBtn" type="button">Upload encoder</button>
-                </div>
-                <div class="row" style="margin-top: 12px;">
-                    <label for="encoderName"><strong>Filename</strong> (e.g. <code>my_encoder.js</code>):</label>
-                    <input type="text" id="encoderName" placeholder="my_encoder.js" style="min-width: 200px;">
-                    <label for="encoderFormat"><strong>Format</strong> (override if auto-detect fails):</label>
-                    <select id="encoderFormat" class="decoder-select">
-                        <option value="auto">Auto-detect</option>
-                        <option value="rbt_plugin">RBT plugin (registerDecoder with encoders)</option>
-                        <option value="ttn_encoder">TTN Encoder(payload, port)</option>
-                        <option value="chirpstack_downlink">ChirpStack encodeDownlink(input)</option>
-                    </select>
-                    <button class="action-button" id="saveEncoderBtn" type="button">Save encoder</button>
-                </div>
-                <textarea id="encoderCode" spellcheck="false" placeholder="Paste encoder code (TTN Encoder, ChirpStack encodeDownlink, or RBT registerDecoder with encoders)…" style="min-height: 120px; margin-top: 10px;"></textarea>
-            </div>
-
-            <div class="panel">
-                <h3>Or paste decoder code</h3>
-                <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
-                    Paste code, test-load in browser, then save when output looks correct.
-                </p>
-                <div class="row">
-                    <label for="decoderName"><strong>Filename</strong> (must end in `.js`):</label>
-                    <input type="text" id="decoderName" placeholder="example_decoder.js">
-                    <label for="decoderFormat"><strong>Format</strong> (override if auto-detect fails):</label>
-                    <select id="decoderFormat" class="decoder-select">
-                        <option value="auto">Auto-detect</option>
-                        <option value="rbt_plugin">Sensor Toolkit plugin (registerDecoder)</option>
-                        <option value="ttn_decoder">TTN Decoder(bytes, port)</option>
-                        <option value="chirpstack_uplink">ChirpStack decodeUplink(input)</option>
-                        <option value="ttn_encoder">TTN Encoder(payload, port)</option>
-                        <option value="chirpstack_downlink">ChirpStack encodeDownlink(input)</option>
-                    </select>
-                    <button class="action-button" id="saveBtn" type="button">Save</button>
-                    <button class="action-button" id="testBtn" type="button">Test-load in browser</button>
-                </div>
-                <textarea id="decoderCode" spellcheck="false" placeholder="(function () {&#10;  'use strict';&#10;  if (!window.RBTDecoders) return;&#10;  window.RBTDecoders.registerDecoder({&#10;    id: 'my_decoder',&#10;    name: 'My Decoder',&#10;    priority: 200,&#10;    canDecode: function (message) { return false; },&#10;    decode: function (message) { return { eventType: 'example', decoded: { ok: true } }; }&#10;  });&#10;})();"></textarea>
-            </div>
-
             <div id="status" class="status"></div>
-
-            <div class="panel">
-                <h3>Test decoder with payload (debug) <button type="button" class="help-button" onclick="alert('Enter a hex or base64 payload and run a decoder to see the decoded output. Useful for debugging without live uplinks. Enter one or both; hex is used if both are set. Spaces and 0x prefixes in hex are ignored.')" title="Help">?</button></h3>
-                <div class="row" style="margin-bottom: 10px;">
-                    <label for="testDecoderSelect"><strong>Decoder</strong>:</label>
-                    <select id="testDecoderSelect" class="decoder-select" style="min-width: 220px;"></select>
-                    <label for="testDecoderPort" style="margin-left: 12px;"><strong>Port (fPort)</strong> (optional):</label>
-                    <input type="number" id="testDecoderPort" min="0" max="255" step="1" placeholder="e.g. 1" style="width: 80px; padding: 6px;">
-                </div>
-                <div style="margin-bottom: 10px;">
-                    <label for="testPayloadHex"><strong>Payload (hex)</strong></label>
-                    <textarea id="testPayloadHex" rows="3" placeholder="e.g. 02 01 64 00 0A" style="min-height: 70px; margin-top: 4px;"></textarea>
-                </div>
-                <div style="margin-bottom: 10px;">
-                    <label for="testPayloadBase64"><strong>Payload (base64)</strong></label>
-                    <textarea id="testPayloadBase64" rows="2" placeholder="e.g. AgFkAAo=" style="min-height: 50px; margin-top: 4px;"></textarea>
-                </div>
-                <div class="row" style="margin-top: 10px;">
-                    <button class="action-button" id="runDecoderTestBtn" type="button">Run decoder</button>
-                </div>
-                <div style="margin-top: 12px;">
-                    <label><strong>Result</strong></label>
-                    <pre id="testDecoderResult" class="mono" style="margin: 6px 0 0; padding: 12px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 4px; min-height: 80px; max-height: 320px; overflow: auto;">—</pre>
+            <div class="tabs-wrap">
+                <div class="tabs">
+                    <button type="button" class="tab-button active" data-tab="upload">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                        Upload decoders / encoders
+                    </button>
+                    <button type="button" class="tab-button" data-tab="test">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                        Test decoders
+                    </button>
+                    <button type="button" class="tab-button" data-tab="installed">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        Installed decoders / encoders
+                    </button>
                 </div>
             </div>
 
-            <div class="panel">
-                <div class="row" style="justify-content: space-between;">
-                    <h3 style="margin: 0;">Installed custom decoders &amp; encoders</h3>
-                    <button class="action-button" id="refreshBtn" type="button">Refresh</button>
+            <div class="tab-panels">
+                <div id="tab-upload" class="tab-panel active">
+                    <div class="panel">
+                        <h3>Upload decoder or encoder file</h3>
+                        <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
+                            Upload a `.js` file and the app will auto-detect decoder/encoder format.
+                        </p>
+                        <div class="row">
+                            <input type="file" id="decoderFile" accept=".js">
+                            <button class="action-button" id="uploadBtn" type="button">Upload</button>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Add encoder separately</h3>
+                        <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
+                            Use this when you only need encoder logic (no uplink decoder).
+                        </p>
+                        <div class="row">
+                            <input type="file" id="encoderFile" accept=".js">
+                            <button class="action-button" id="uploadEncoderBtn" type="button">Upload encoder</button>
+                        </div>
+                        <div class="row" style="margin-top: 12px;">
+                            <label for="encoderName"><strong>Filename</strong> (e.g. <code>my_encoder.js</code>):</label>
+                            <input type="text" id="encoderName" placeholder="my_encoder.js" style="min-width: 200px;">
+                            <label for="encoderFormat"><strong>Format</strong> (override if auto-detect fails):</label>
+                            <select id="encoderFormat" class="decoder-select">
+                                <option value="auto">Auto-detect</option>
+                                <option value="rbt_plugin">RBT plugin (registerDecoder with encoders)</option>
+                                <option value="ttn_encoder">TTN Encoder(payload, port)</option>
+                                <option value="chirpstack_downlink">ChirpStack encodeDownlink(input)</option>
+                            </select>
+                            <button class="action-button" id="saveEncoderBtn" type="button">Save encoder</button>
+                        </div>
+                        <textarea id="encoderCode" spellcheck="false" placeholder="Paste encoder code (TTN Encoder, ChirpStack encodeDownlink, or RBT registerDecoder with encoders)…" style="min-height: 120px; margin-top: 10px;"></textarea>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Or paste decoder code</h3>
+                        <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
+                            Paste code, test-load in browser, then save when output looks correct.
+                        </p>
+                        <div class="row">
+                            <label for="decoderName"><strong>Filename</strong> (must end in `.js`):</label>
+                            <input type="text" id="decoderName" placeholder="example_decoder.js">
+                            <label for="decoderFormat"><strong>Format</strong> (override if auto-detect fails):</label>
+                            <select id="decoderFormat" class="decoder-select">
+                                <option value="auto">Auto-detect</option>
+                                <option value="rbt_plugin">Sensor Toolkit plugin (registerDecoder)</option>
+                                <option value="ttn_decoder">TTN Decoder(bytes, port)</option>
+                                <option value="chirpstack_uplink">ChirpStack decodeUplink(input)</option>
+                                <option value="ttn_encoder">TTN Encoder(payload, port)</option>
+                                <option value="chirpstack_downlink">ChirpStack encodeDownlink(input)</option>
+                            </select>
+                            <button class="action-button" id="saveBtn" type="button">Save</button>
+                        </div>
+                        <textarea id="decoderCode" spellcheck="false" placeholder="(function () {&#10;  'use strict';&#10;  if (!window.RBTDecoders) return;&#10;  window.RBTDecoders.registerDecoder({&#10;    id: 'my_decoder',&#10;    name: 'My Decoder',&#10;    priority: 200,&#10;    canDecode: function (message) { return false; },&#10;    decode: function (message) { return { eventType: 'example', decoded: { ok: true } }; }&#10;  });&#10;})();"></textarea>
+                    </div>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Type</th>
-                            <th>Filename</th>
-                            <th>URL</th>
-                            <th>Size</th>
-                            <th>Modified</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="decoderTableBody">
-                        <tr><td colspan="6" style="text-align:center; padding: 16px;">Loading…</td></tr>
-                    </tbody>
-                </table>
+
+                <div id="tab-test" class="tab-panel">
+                    <div class="panel">
+                        <h3>Test JavaScript code</h3>
+                        <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
+                            Test your decoder or encoder code here before adding it to the library. 
+                        </p>
+                        <div id="testJsCodeEditor" class="test-js-editor" style="height: 220px; margin-bottom: 8px;"></div>
+                        <div class="row">
+                            <button class="action-button" id="runTestJsBtn" type="button">Run</button>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label><strong>Result</strong></label>
+                            <pre id="testJsResult" class="mono" style="margin: 6px 0 0; padding: 12px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 4px; min-height: 60px; max-height: 200px; overflow: auto;">—</pre>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Test decoder with payload (debug) <button type="button" class="help-button" onclick="alert('Enter a hex or base64 payload and run a decoder to see the decoded output. Useful for debugging without live uplinks. Enter one or both; hex is used if both are set. Spaces and 0x prefixes in hex are ignored.')" title="Help">?</button></h3>
+                        <div class="row" style="margin-bottom: 10px;">
+                            <label for="testDecoderSelect"><strong>Decoder</strong>:</label>
+                            <select id="testDecoderSelect" class="decoder-select" style="min-width: 220px;"></select>
+                            <label for="testDecoderPort" style="margin-left: 12px;"><strong>Port (fPort)</strong> (optional):</label>
+                            <input type="number" id="testDecoderPort" min="0" max="255" step="1" placeholder="e.g. 1" style="width: 80px; padding: 6px;">
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <label for="testPayloadHex"><strong>Payload (hex)</strong></label>
+                            <textarea id="testPayloadHex" rows="3" placeholder="e.g. 02 01 64 00 0A" style="min-height: 70px; margin-top: 4px;"></textarea>
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <label for="testPayloadBase64"><strong>Payload (base64)</strong></label>
+                            <textarea id="testPayloadBase64" rows="2" placeholder="e.g. AgFkAAo=" style="min-height: 50px; margin-top: 4px;"></textarea>
+                        </div>
+                        <div class="row" style="margin-top: 10px;">
+                            <button class="action-button" id="runDecoderTestBtn" type="button">Run decoder</button>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <label><strong>Result</strong></label>
+                            <pre id="testDecoderResult" class="mono" style="margin: 6px 0 0; padding: 12px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 4px; min-height: 80px; max-height: 320px; overflow: auto;">—</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-installed" class="tab-panel">
+                    <div class="panel">
+                        <div class="row" style="justify-content: space-between;">
+                            <h3 style="margin: 0;">Installed custom decoders &amp; encoders</h3>
+                            <button class="action-button" id="refreshBtn" type="button">Refresh</button>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Filename</th>
+                                    <th>URL</th>
+                                    <th>Size</th>
+                                    <th>Modified</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="decoderTableBody">
+                                <tr><td colspan="6" style="text-align:center; padding: 16px;">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel sensor-library-footer">
+                <h3>Update RadioBridge Decoder</h3>
+                <p style="margin: 6px 0 10px; color: #666; font-size: 12px;">
+                    Fetch the latest RadioBridge decoder bundle into this gateway. This keeps RadioBridge devices in sync with their official decoding logic while preserving local app integrations.
+                </p>
+                <p style="margin: 0 0 10px; color: #666; font-size: 11px;">
+                    Configure the source URL in <code>config/radioBridgeTools.cfg.json</code> (<code>radiobridge_decoder_url</code>) or set the <code>RADIOBRIDGE_DECODER_URL</code> environment variable. A <strong>502 Bad Gateway</strong> means the server could not reach that URL (wrong URL, network, or upstream error).
+                </p>
+                <div class="row" style="align-items: center; gap: 10px;">
+                    <button class="action-button" id="rbUpdateBtn" type="button">Update RadioBridge Decoder</button>
+                    <span id="rbUpdateStatus" class="hint">Status: not checked yet.</span>
+                </div>
+                <p id="rbUpdateMeta" class="hint" style="margin-top: 6px;"></p>
             </div>
         </div>
     </section>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.0/ace.js"></script>
     <script src="/static/js/decoders/decoder_registry.js"></script>
     <script src="/static/js/decoders/radiobridge.js"></script>
     <script src="/static/js/decoders/sensative_strips.js"></script>
@@ -258,6 +387,34 @@
     <script>
         const statusEl = document.getElementById('status');
         const tableBody = document.getElementById('decoderTableBody');
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabPanels = document.querySelectorAll('.tab-panel');
+        let testJsEditor = null;
+
+        function initTestJsEditor() {
+            if (testJsEditor) return;
+            const el = document.getElementById('testJsCodeEditor');
+            if (!el || typeof ace === 'undefined') return;
+            ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.0/');
+            testJsEditor = ace.edit(el);
+            testJsEditor.setTheme('ace/theme/chrome');
+            testJsEditor.session.setMode('ace/mode/javascript');
+            testJsEditor.session.setUseWrapMode(true);
+            testJsEditor.setOptions({ fontSize: '12px', showPrintMargin: false });
+            testJsEditor.setValue(testJsEditor.getValue().trim() || "(function () {\n  'use strict';\n  if (!window.RBTDecoders) return;\n  window.RBTDecoders.registerDecoder({\n    id: 'my_decoder',\n    name: 'My Decoder',\n    priority: 200,\n    canDecode: function (message) { return false; },\n    decode: function (message) { return { eventType: 'example', decoded: { ok: true } }; }\n  });\n})();", -1);
+        }
+
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.getAttribute('data-tab');
+                tabButtons.forEach(b => b.classList.remove('active'));
+                tabPanels.forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                const panel = document.getElementById('tab-' + target);
+                if (panel) panel.classList.add('active');
+                if (target === 'test') initTestJsEditor();
+            });
+        });
 
         // --- Decoder tester (manual hex/base64 debug) ---
         function hexToBytes(hexStr) {
@@ -354,6 +511,66 @@
         function clearStatus() {
             statusEl.style.display = 'none';
             statusEl.textContent = '';
+        }
+
+        async function loadRadiobridgeMetadata() {
+            const statusSpan = document.getElementById('rbUpdateStatus');
+            const metaEl = document.getElementById('rbUpdateMeta');
+            if (!statusSpan || !metaEl) return;
+            try {
+                const res = await fetch('/api/decoders/radiobridge/metadata');
+                const data = await res.json().catch(() => ({}));
+                if (!data || !data.ok || !data.meta) {
+                    statusSpan.textContent = 'Status: no Radiobridge bundle installed yet.';
+                    metaEl.textContent = '';
+                    return;
+                }
+                const m = data.meta || {};
+                const src = m.source_url || '(configured URL)';
+                statusSpan.textContent = 'Status: installed from ' + src;
+                const bits = [];
+                if (m.fetched_at) {
+                    try {
+                        const dt = new Date(m.fetched_at);
+                        bits.push('Last updated: ' + dt.toLocaleString());
+                    } catch {
+                        bits.push('Last updated: ' + m.fetched_at);
+                    }
+                }
+                if (typeof m.bytes === 'number') {
+                    bits.push('Size: ' + m.bytes + ' bytes');
+                }
+                metaEl.textContent = bits.join(' • ');
+            } catch (e) {
+                statusSpan.textContent = 'Status: unable to read Radiobridge status.';
+                metaEl.textContent = '';
+            }
+        }
+
+        async function updateRadiobridgeNow() {
+            const btn = document.getElementById('rbUpdateBtn');
+            clearStatus();
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Updating…';
+            }
+            try {
+                const res = await fetch('/api/decoders/radiobridge/update', { method: 'POST' });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data || data.ok === false) {
+                    showStatus('err', (data && data.error) || 'Failed to update Radiobridge library.');
+                } else {
+                    showStatus('ok', 'Updated Radiobridge library successfully.');
+                }
+                await loadRadiobridgeMetadata();
+            } catch (e) {
+                showStatus('err', 'Update failed: ' + (e && e.message ? e.message : String(e)));
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Update Radiobridge library';
+                }
+            }
         }
 
         function normalizeFilename(name) {
@@ -884,48 +1101,6 @@ ${code}
             await refreshList();
         }
 
-        function testLoad() {
-            clearStatus();
-            const content = (document.getElementById('decoderCode').value || '').trim();
-            const filename = normalizeFilename(document.getElementById('decoderName').value) || 'test.js';
-            const formatSel = document.getElementById('decoderFormat').value;
-            if (!content) {
-                showStatus('err', 'Paste decoder or encoder code first.');
-                return;
-            }
-            if (looksLikeNodeModule(content)) {
-                showStatus('err', 'Node/CommonJS (require/exports) is not supported.');
-                return;
-            }
-            let toRun;
-            try {
-                const r = wrapIfNeeded(content, filename, formatSel, false);
-                toRun = r.wrapped;
-            } catch (e) {
-                showStatus('err', String(e && e.message ? e.message : e));
-                return;
-            }
-            try {
-                const blob = new Blob([toRun], { type: 'text/javascript' });
-                const url = URL.createObjectURL(blob);
-                const s = document.createElement('script');
-                s.src = url;
-                s.onload = () => {
-                    URL.revokeObjectURL(url);
-                    populateDecoderTesterDropdown();
-                    const decs = (window.RBTDecoders && window.RBTDecoders.listDecoders) ? window.RBTDecoders.listDecoders() : [];
-                    showStatus('ok', `Loaded into browser. Registered decoders now: ${decs.length}`);
-                };
-                s.onerror = () => {
-                    URL.revokeObjectURL(url);
-                    showStatus('err', 'Failed to load script in browser.');
-                };
-                document.body.appendChild(s);
-            } catch (e) {
-                showStatus('err', String(e && e.message ? e.message : e));
-            }
-        }
-
         async function deleteDecoder(name) {
             clearStatus();
             const res = await fetch('/api/decoders/delete', {
@@ -958,10 +1133,32 @@ ${code}
             await refreshList();
         }
 
+        function runTestJs() {
+            if (!testJsEditor) initTestJsEditor();
+            const resultEl = document.getElementById('testJsResult');
+            if (!resultEl) return;
+            const code = (testJsEditor ? testJsEditor.getValue() : '').trim();
+            if (!code) {
+                resultEl.textContent = '— Paste code above and click Run.';
+                resultEl.style.background = '#f5f5f5';
+                return;
+            }
+            try {
+                var result = eval(code);
+                resultEl.textContent = result === undefined ? '(no return value)' : (typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result));
+                resultEl.style.background = '#e8f5e9';
+            } catch (e) {
+                resultEl.textContent = (e && e.message ? e.message : String(e)) + (e && e.stack ? '\n\n' + e.stack : '');
+                resultEl.style.background = '#ffebee';
+            }
+        }
+
         document.getElementById('uploadBtn').addEventListener('click', uploadFile);
         document.getElementById('saveBtn').addEventListener('click', saveFromTextbox);
-        document.getElementById('testBtn').addEventListener('click', testLoad);
         document.getElementById('refreshBtn').addEventListener('click', refreshList);
+        if (document.getElementById('runTestJsBtn')) {
+            document.getElementById('runTestJsBtn').addEventListener('click', runTestJs);
+        }
         if (document.getElementById('runDecoderTestBtn')) {
             document.getElementById('runDecoderTestBtn').addEventListener('click', runDecoderTest);
         }
@@ -970,6 +1167,12 @@ ${code}
         }
         if (document.getElementById('saveEncoderBtn')) {
             document.getElementById('saveEncoderBtn').addEventListener('click', saveEncoder);
+        }
+
+        const rbUpdateBtn = document.getElementById('rbUpdateBtn');
+        if (rbUpdateBtn) {
+            rbUpdateBtn.addEventListener('click', updateRadiobridgeNow);
+            loadRadiobridgeMetadata();
         }
 
         populateDecoderTesterDropdown();
