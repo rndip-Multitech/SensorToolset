@@ -24,7 +24,7 @@ RadioBridgeTools/
 
 ## Installation
 
-**Offline (no internet on gateway):** See [OFFLINE_INSTALL.md](OFFLINE_INSTALL.md) for building a self-contained binary on a Linux build machine and deploying it to the gateway without Python/pip, or for installing from source using offline pip (wheels).
+
 
 **Standard (gateway has internet):**
 
@@ -35,6 +35,9 @@ RadioBridgeTools/
    - Run `Install postinstall` to install Python dependencies
    - Run `Start start` to start the application
 
+*Application  takes several minutes to install.
+Open an input firewall filter to allow access to tcp port from your config(default:5000)
+
 ## Configuration
 
 The application can be configured via the `config/radioBridgeTools.cfg.json` file:
@@ -43,13 +46,15 @@ The application can be configured via the `config/radioBridgeTools.cfg.json` fil
 {
     "host": "0.0.0.0",
     "port": 5000,
-    "debug": false
+    "debug": false,
+    "radiobridge_decoder_url": "https://webfiles.multitech.com/BACnet/MultiTech/RadioBridgeDecoder/radio_bridge_packet_decoder.js"
 }
 ```
 
 - `host`: The host address to bind the server to (default: "0.0.0.0")
 - `port`: The port number to run the server on (default: 5000)
 - `debug`: Enable debug mode for Flask (default: false)
+- `radiobridge_decoder_url`: Optional URL for the upstream RadioBridge decoder bundle. This is used by the **Sensor Library** page when you click **Update RadioBridge Decoder**. It can also be overridden at runtime with the `RADIOBRIDGE_DECODER_URL` environment variable.
 
 ## Application Lifecycle
 
@@ -69,7 +74,7 @@ The `Start` script handles the application lifecycle:
 - python3-multiprocessing
 - python3-mmap
 
-### Python Dependencies
+### Python Dependencies (current iteration does require internet access to install)
 - flask~=3.0.3
 - werkzeug~=3.0.3
 - jinja2~=3.1.4
@@ -79,10 +84,23 @@ The `Start` script handles the application lifecycle:
 Once installed and started, the application will be accessible at:
 - `http://<gateway-ip>:5000`
 
-The application serves the RadioBridge Sensor Configuration Tool, allowing users to:
-- Configure general sensor settings
-- Configure advanced sensor settings
-- Generate hexcodes for various RadioBridge sensor types
+## Web UI overview
+
+The web UI is organized into several main pages:
+
+- **Home** – Landing page with tiles linking to each major workflow (Uplinks, Send Downlinks, Sensor Monitor, Sensor Library, Cloud Integrations, RadioBridge Config).
+- **Uplinks** – Connects to the gateway's MQTT broker and shows a live/cached table of uplink messages. A compact **MQTT** bar lets you set broker/port/topic; a condensed **Filters & Cache** bar lets you filter by DevEUI, event type, time range, and view mode (decoded/raw/both), and manage the local cache (import, CSV/JSON export, clear).
+- **Send Downlinks** – Uses the same MQTT connection to send downlinks to a selected device. Supports:
+  - **Build from encoder**: choose a codec/command, fill in parameters, and let the encoder build the payload.
+  - **Raw hex / base64**: send a manual payload on a chosen port.
+- **Sensor Monitor** – Live/near‑real‑time visualization of sensor state and history (including door/window and movement), with charts and per‑sensor snapshots.
+- **Sensor Library** – Central place to manage decoders/encoders:
+  - **Upload decoders / encoders**: upload `.js` files, or paste code and save.
+  - **Test JavaScript code**: small editor with syntax highlighting to run decoder/encoder JavaScript in the browser before saving it.
+  - **Installed decoders / encoders**: table of installed files with actions.
+  - **Update RadioBridge Decoder**: fetches and installs the latest RadioBridge core decoder bundle from `radiobridge_decoder_url`, while keeping local application‑specific integrations.
+- **RadioBridge Config** – UI for building RadioBridge‑specific configuration downlinks using the app's encoder logic.
+- **Cloud Integrations** – Configure forwarding of decoded uplinks to external systems (HTTP/MQTT/UDP/TCP), with filters and test tools.
 
 ## Manual Testing
 
