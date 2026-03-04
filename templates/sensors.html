@@ -1288,14 +1288,60 @@
             });
         }
 
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.async = false;
+                s.onload = () => resolve(true);
+                s.onerror = () => reject(new Error('Failed to load ' + src));
+                document.head.appendChild(s);
+            });
+        }
+
+        let customDecodersLoaded = false;
+        async function loadCustomDecodersOnce(forceReload = false) {
+            if (customDecodersLoaded && !forceReload) return;
+            customDecodersLoaded = true;
+            try {
+                const [decRes, encRes] = await Promise.all([fetch('/api/decoders/list'), fetch('/api/encoders/list')]);
+                const decData = await decRes.json().catch(() => ({}));
+                const encData = await encRes.json().catch(() => ({}));
+                const decoderFiles = (decData && decData.files) ? decData.files.map((f) => ({ ...f, url: f.url || ('/decoders/custom/' + f.name) })) : [];
+                const encoderFiles = (encData && encData.files) ? encData.files.map((f) => ({ ...f, url: f.url || ('/encoders/custom/' + f.name) })) : [];
+                const files = decoderFiles.concat(encoderFiles);
+                for (const f of files) {
+                    if (!f || !f.url) continue;
+                    const v = (f.mtime !== undefined && f.mtime !== null) ? String(f.mtime) : String(Date.now());
+                    try {
+                        await loadScript(f.url + '?v=' + encodeURIComponent(v));
+                    } catch (e) {
+                        console.warn('Custom decoder load error (sensors):', f, e);
+                    }
+                }
+            } catch (e) {
+                console.warn('Custom decoder/encoder load failed in sensors:', e);
+            }
+        }
+
         const EXCLUDED_FIELDS = new Set([
+            // Generic protocol / metadata fields
             'protocol_version', 'protocol', 'packet_count', 'packet_counter',
             'firmware_version', 'hardware_version', 'version',
             'payload_hex', 'payload_base64', 'payload_len', 'payload_length', 'has_payload',
             'port', 'fport', 'f_port',
             'eventType', 'event_type', 'message_type',
-            'topic', 'time', 'cachedAt', 'fingerprint', 'id',
-            'deveui', 'dev_eui', 'device_eui', 'historyStart', 'historyPosition',
+            'topic', 'time', 'current_time', 'cachedAt', 'fingerprint', 'id',
+            // Device identity / gateway metadata (not sensor measurements)
+            'deveui', 'dev_eui', 'device_eui', 'joineui', 'join_eui', 'appeui', 'app_eui',
+            'gweui', 'gw_eui', 'devaddr', 'dev_addr', 'mid', 'mhdr', 'mtype', 'cls',
+            // LoRaWAN / radio transport metadata (frame counters, radio params, etc.)
+            'freq', 'foff', 'chan', 'rfch', 'codr', 'datr', 'dr', 'mod', 'size',
+            'tmst', 'stat', 'opts', 'fcnt', 'seqn', 'jver', 'lsnr', 'rssis',
+            // Helper / synthetic fields
+            'data_decoded_payload',
+            // History / accumulation helpers
+            'historyStart', 'historyPosition',
             'historycount', 'history_count', 'subbands', 'sub_bands', 'accumulation_count', 'accumulation'
         ]);
 
@@ -1319,6 +1365,52 @@
                 return merged;
             }
             return decoded || {};
+        }
+
+        // Decode a message using the same logic as uplinks (auto-decoder + fallback to raw),
+        // and normalize the output shape.
+        function decodeMessageForSensors(message, decoderId) {
+            if (!window.RBTDecoders) {
+                return { eventType: 'no_decoder_registry', decoded: (message && message.data) ? message.data : message };
+            }
+            try {
+                let decoder = null;
+                if (!decoderId || decoderId === 'auto') {
+                    decoder = window.RBTDecoders.pickAutoDecoder(message);
+                } else {
+                    decoder = window.RBTDecoders.getDecoder(decoderId);
+                }
+                if (!decoder) decoder = window.RBTDecoders.getDecoder('raw');
+                if (!decoder) {
+                    return { eventType: 'no_decoder', decoded: (message && message.data) ? message.data : message };
+                }
+                const out = decoder.decode(message);
+                return window.RBTDecoders.normalizeDecodedOutput(out);
+            } catch (e) {
+                return { eventType: 'decode_error', decoded: { error: String(e && e.message ? e.message : e) } };
+            }
+        }
+
+        // Promote nested temperature fields from common gateway/decoder shapes to top-level
+        // so they are easier to graph (e.g. data.TempInt.currentTemperature -> temperature_c).
+        function promoteNestedTemperatureFields(obj) {
+            if (!obj || typeof obj !== 'object') return obj;
+            try {
+                // Look under a top-level "data" wrapper if present
+                const root = (obj.data && typeof obj.data === 'object') ? obj.data : obj;
+                if (root.TempInt && typeof root.TempInt === 'object') {
+                    const ti = root.TempInt;
+                    if (obj.temperature_c === undefined && typeof ti.currentTemperature === 'number') {
+                        obj.temperature_c = ti.currentTemperature;
+                    }
+                    if (obj.temperature_event === undefined && typeof ti.temperatureEvent === 'number') {
+                        obj.temperature_event = ti.temperatureEvent;
+                    }
+                }
+            } catch (e) {
+                // Best-effort helper; ignore errors
+            }
+            return obj;
         }
 
         function extractNumericValues(decoded, prefix = '') {
@@ -2194,17 +2286,19 @@
                     return; // Skip these message types
                 }
                 
-                // Handle decoded field - it might be a JSON string or already an object
+                // Start from the cached decoded payload (what Uplinks already decoded)
+                // and only fall back to re-decoding when that payload is empty or clearly
+                // just raw payload metadata. This keeps Sensor Monitor aligned with what
+                // you see in the Uplinks "Decoded" panel.
                 let decoded = msg.decoded || {};
                 if (typeof decoded === 'string') {
                     try {
                         decoded = JSON.parse(decoded);
                     } catch (e) {
-                        console.warn('Failed to parse decoded field:', e);
+                        console.warn('Failed to parse cached decoded field:', e);
                         decoded = {};
                     }
                 }
-                
                 // Helper: detect if this is effectively just a raw payload (no actual sensor fields)
                 function looksLikeRawPayload(obj) {
                     if (!obj || typeof obj !== 'object') return false;
@@ -2220,27 +2314,9 @@
                     ]);
                     return keys.every(k => RAW_KEYS.has(k.toLowerCase()));
                 }
-                
-                // If decoded is empty, errored, or just raw payload metadata, try to auto-decode again
                 if (!decoded || Object.keys(decoded).length === 0 || decoded.error || looksLikeRawPayload(decoded)) {
-                    try {
-                        if (window.RBTDecoders) {
-                            let decoder = null;
-                            if (!decoderId || decoderId === 'auto') {
-                                decoder = window.RBTDecoders.pickAutoDecoder(msg.original);
-                            } else {
-                                decoder = window.RBTDecoders.getDecoder(decoderId);
-                            }
-                            if (!decoder) decoder = window.RBTDecoders.getDecoder('raw');
-                            if (decoder) {
-                                const out = decoder.decode(msg.original);
-                                const normalized = window.RBTDecoders.normalizeDecodedOutput(out);
-                                decoded = normalized.decoded || {};
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Decode error:', e);
-                    }
+                    const decodedResult = decodeMessageForSensors(msg.original, decoderId);
+                    decoded = decodedResult.decoded || {};
                 }
 
                 // Skip messages that are clearly not sensor data
@@ -2255,7 +2331,41 @@
                 }
                 
                 // Normalize first to check the actual content
-                const normalizedForCheck = normalizeDecoded(decoded);
+                let normalizedForCheck = normalizeDecoded(decoded);
+
+                // If decoded still looks like pure raw payload metadata, but the original
+                // message has a richer decoded structure (e.g. server-side decoded JSON),
+                // fall back to using that so we can graph nested numeric values like
+                // data.TempInt.currentTemperature.
+                const RAW_KEYS = new Set(['has_payload', 'payload_hex', 'payload_base64', 'payload_len', 'payload', 'payload_ascii']);
+                function isPureRawPayloadObject(obj) {
+                    if (!obj || typeof obj !== 'object') return false;
+                    const keys = Object.keys(obj);
+                    if (keys.length === 0) return false;
+                    return keys.every(k => RAW_KEYS.has(k.toLowerCase()));
+                }
+
+                if (isPureRawPayloadObject(normalizedForCheck) && msg.original && msg.original.data && typeof msg.original.data === 'object') {
+                    const dataObj = msg.original.data;
+                    // Prefer nested decoded/data objects if present
+                    let serverDecoded = null;
+                    if (dataObj.decoded && typeof dataObj.decoded === 'object') {
+                        serverDecoded = dataObj.decoded;
+                    } else if (dataObj.data && typeof dataObj.data === 'object') {
+                        serverDecoded = dataObj.data;
+                    }
+                    if (!serverDecoded) {
+                        const keys = Object.keys(dataObj);
+                        const hasNonRawKey = keys.some(k => !RAW_KEYS.has(k.toLowerCase()));
+                        if (hasNonRawKey) {
+                            serverDecoded = dataObj;
+                        }
+                    }
+                    if (serverDecoded && typeof serverDecoded === 'object') {
+                        decoded = serverDecoded;
+                        normalizedForCheck = normalizeDecoded(decoded);
+                    }
+                }
                 
                 // Skip Sensative Strips settings messages that only have "kind" and "note" (port 11)
                 // But only if they don't have any actual sensor report data
@@ -2300,7 +2410,10 @@
                 }
 
                 // Normalize decoded structure before extraction
-                const normalizedDecoded = normalizeDecoded(decoded);
+                // Promote any nested temperature fields (e.g. data.TempInt.currentTemperature)
+                promoteNestedTemperatureFields(normalizedForCheck);
+
+                const normalizedDecoded = normalizedForCheck;
                 
                 // Debug: log normalized structure
                 if (decoderId && (decoderId.includes('sensative') || decoderId.includes('strips'))) {
@@ -2368,20 +2481,11 @@
                     (normalizedDecoded.TempDoorReport && typeof normalizedDecoded.TempDoorReport.door === 'object' && normalizedDecoded.TempDoorReport.door.value !== undefined)
                 );
                 
-                // Check for any other graphable numeric values (but exclude metadata)
-                const hasOtherGraphableData = normalizedDecoded && Object.keys(normalizedDecoded).some(key => {
-                    const keyLower = key.toLowerCase();
-                    if (EXCLUDED_FIELDS.has(keyLower) || 
-                        keyLower === 'historystart' || keyLower === 'historyposition' ||
-                        keyLower.includes('historycount') || 
-                        keyLower.includes('subband') || keyLower.includes('sub_band') ||
-                        (keyLower.includes('accumulation') && keyLower.includes('count'))) {
-                        return false;
-                    }
-                    const val = normalizedDecoded[key];
-                    return (typeof val === 'number' && key !== 'packet_count' && key !== 'protocol_version' && key !== 'payload_len') ||
-                           (typeof val === 'object' && val !== null && val.value !== undefined);
-                });
+                // Check for any other graphable numeric values (including nested ones)
+                // Use extractNumericValues so that nested structures like data.TempInt.currentTemperature
+                // are treated as sensor data.
+                const numericPreview = normalizedDecoded ? extractNumericValues(normalizedDecoded) : {};
+                const hasOtherGraphableData = numericPreview && Object.keys(numericPreview).length > 0;
                 
                 const finalHasSensorData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent || hasDoorWindowEvent || hasOtherGraphableData;
                 
@@ -2392,8 +2496,8 @@
                 }
                 
                 // Quick check for sensor data before extraction
-                // Include temperature event fields in the check
-                const quickCheckHasData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent || hasDoorWindowEvent ||
+                // Include temperature event fields and any nested numeric fields in the check
+                const quickCheckHasData = hasStripsReports || hasRadioBridgeFields || hasMovementEvent || hasDoorWindowEvent || hasOtherGraphableData ||
                     (normalizedDecoded && Object.keys(normalizedDecoded).some(k => {
                         const kLower = k.toLowerCase();
                         // Check for temperature fields (including event fields)
@@ -2416,7 +2520,7 @@
                 
                 // Extract numeric and binary values for messages that have sensor data
                 processedCount++;
-                const numeric = extractNumericValues(normalizedDecoded);
+                const numeric = numericPreview || extractNumericValues(normalizedDecoded);
                 const binary = extractBinaryValues(normalizedDecoded);
                 const signal = extractSignalData(msg);
                 
@@ -2866,7 +2970,12 @@
             if (hasRssi) availableFields.push('RSSI');
             if (hasSnr) availableFields.push('SNR');
             const chartPrefs = getChartPrefs(deveui);
-            const isFieldEnabled = (field) => chartPrefs.enabled === null || (chartPrefs.enabled && chartPrefs.enabled.includes(field));
+            const isFieldEnabled = (field) => {
+                // No prefs stored: enable everything by default
+                if (chartPrefs.enabled === null) return true;
+                // Otherwise, only fields explicitly enabled in prefs are on
+                return !!(chartPrefs.enabled && chartPrefs.enabled.includes(field));
+            };
             const getChartType = (field) => (chartPrefs.chartTypes && chartPrefs.chartTypes[field]) || 'line';
 
             // Graphs Section (GROUPED)
@@ -3172,6 +3281,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 await initDB();
+                await loadCustomDecodersOnce(false);
                 await fetchDeviceNames();
                 await syncPersistentCache(5000);
                 await populateSensorList();

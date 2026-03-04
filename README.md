@@ -18,7 +18,7 @@ RadioBridgeTools/
 │   └── radioBridgeTools.cfg.json # Default configuration
 ├── provisioning/        # Dependency packages
 │   ├── p_manifest.json  # Package manifest
-│   └── README.md        # Provisioning documentation
+├── README.md            # Provisioning documentation
 └── [HTML/CSS/JS files]  # Application static files
 ```
 
