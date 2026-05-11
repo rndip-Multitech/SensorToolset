@@ -1,0 +1,7 @@
+# Keep gateway-executed scripts in Unix format.
+Start text eol=lf
+Install text eol=lf
+*.sh text eol=lf
+
+# Keep Python source Unix-friendly for gateway runtime.
+*.py text eol=lf

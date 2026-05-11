@@ -739,6 +739,10 @@
                     </svg>
                     <a href="cloud_integrations.html">Cloud Integrations</a>
                 </li>
+                <li class="item">
+                    <img src="/static/icons/chat-right-text.svg" width="24" height="24" class="icon-margin" alt="Notifications">
+                    <a href="notifications.html">Notifications</a>
+                </li>
             </ul>
         </div>
         <div class="nav-profile">
@@ -812,6 +816,13 @@
         let lastRenderedMarker = '';
         let currentDevEUI = null;
         let deviceNamesMap = {};
+        let knownSensors = new Set();
+        let sensorListDirty = true;
+        let lastPersistentSyncIso = '';
+        let lastStatusByDevEui = {};
+        let lastStatusNotificationAt = {};
+        let alertRulesConfig = null;
+        let alertRuleRuntime = {};
         let dateFilter = { from: null, to: null };
         let activeQuickRange = ''; // '1h'|'24h'|'7d'|'30d'|'all'|''
         const CHART_PREFS_KEY = 'sensorChartPrefs';
@@ -1186,8 +1197,6 @@
         async function cacheIncomingMessage(message) {
             if (!db) await initDB();
             const fingerprint = getMessageFingerprint(message);
-            const exists = await messageExistsByFingerprint(fingerprint);
-            if (exists) return false;
 
             const dataObj = (message && message.data && typeof message.data === 'object') ? message.data : {};
             const time = dataObj.current_time || dataObj.time || new Date().toISOString();
@@ -1207,7 +1216,14 @@
                 const transaction = db.transaction([STORE_NAME], 'readwrite');
                 const store = transaction.objectStore(STORE_NAME);
                 const request = store.add(messageRecord);
-                request.onsuccess = () => resolve(true);
+                request.onsuccess = () => {
+                    const dev = messageRecord.deveui;
+                    if (dev && !knownSensors.has(dev)) {
+                        knownSensors.add(dev);
+                        sensorListDirty = true;
+                    }
+                    resolve(true);
+                };
                 request.onerror = () => {
                     if (request.error && request.error.name === 'ConstraintError') {
                         resolve(false);
@@ -1222,11 +1238,22 @@
             if (!db) await initDB();
             let merged = 0;
             try {
-                const res = await fetch(`/api/uplinks/persistent-cache?limit=${encodeURIComponent(limit)}`);
+                const params = new URLSearchParams({ limit: String(limit) });
+                if (lastPersistentSyncIso) {
+                    params.set('since', lastPersistentSyncIso);
+                }
+                const res = await fetch(`/api/uplinks/persistent-cache?${params.toString()}`);
                 const data = await res.json().catch(function () { return { messages: [] }; });
                 const messages = Array.isArray(data.messages) ? data.messages : [];
+                let latestSeen = lastPersistentSyncIso;
                 for (let i = 0; i < messages.length; i++) {
                     const m = messages[i];
+                    const mTime = (m && typeof m === 'object')
+                        ? ((m.data && m.data.current_time) || m.time || (m.data && m.data.time) || '')
+                        : '';
+                    if (mTime && (!latestSeen || String(mTime) > String(latestSeen))) {
+                        latestSeen = String(mTime);
+                    }
                     const original = { type: m.type, topic: m.topic, data: m.data || m };
                     try {
                         const added = await cacheIncomingMessage(original);
@@ -1235,6 +1262,7 @@
                         // Continue merging remaining messages.
                     }
                 }
+                if (latestSeen) lastPersistentSyncIso = latestSeen;
             } catch (e) {
                 console.warn('Persistent cache sync failed:', e);
             }
@@ -1266,6 +1294,9 @@
 
         async function getSensorList() {
             if (!db) await initDB();
+            if (!sensorListDirty && knownSensors.size > 0) {
+                return Array.from(knownSensors).sort();
+            }
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([STORE_NAME], 'readonly');
                 const store = transaction.objectStore(STORE_NAME);
@@ -1281,11 +1312,157 @@
                         }
                         cursor.continue();
                     } else {
-                        resolve(Array.from(sensors).sort());
+                        knownSensors = sensors;
+                        sensorListDirty = false;
+                        resolve(Array.from(knownSensors).sort());
                     }
                 };
                 request.onerror = () => reject(request.error);
             });
+        }
+
+        async function maybeSendStatusEmail(deveui, sensorName, statusObj) {
+            if (!statusObj || statusObj.status === 'active') return;
+            const key = `${deveui}|${statusObj.status}`;
+            const now = Date.now();
+            const cooldownMs = 30 * 60 * 1000;
+            if (lastStatusNotificationAt[key] && (now - lastStatusNotificationAt[key]) < cooldownMs) {
+                return;
+            }
+            try {
+                const r = await fetch('/api/notifications/email/notify-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        deveui: deveui,
+                        sensor_name: sensorName || '',
+                        status: statusObj.label || statusObj.status,
+                        detail: statusObj.detail || ''
+                    })
+                });
+                if (r.ok) {
+                    lastStatusNotificationAt[key] = now;
+                }
+            } catch (e) {
+                console.warn('Status notification failed:', e);
+            }
+        }
+
+        async function loadAlertRulesConfig() {
+            if (alertRulesConfig) return alertRulesConfig;
+            try {
+                const r = await fetch('/api/notifications/rules');
+                const d = await r.json().catch(() => ({}));
+                alertRulesConfig = d.config || { quiet_hours: {}, escalation: {}, rules: [] };
+            } catch (e) {
+                alertRulesConfig = { quiet_hours: {}, escalation: {}, rules: [] };
+            }
+            return alertRulesConfig;
+        }
+
+        function toComparable(v) {
+            if (typeof v === 'number') return v;
+            const n = Number(v);
+            if (!isNaN(n)) return n;
+            return String(v || '').toLowerCase();
+        }
+
+        function compareWithOperator(left, op, right) {
+            if (op === '>') return left > right;
+            if (op === '>=') return left >= right;
+            if (op === '<') return left < right;
+            if (op === '<=') return left <= right;
+            return false;
+        }
+
+        function thresholdOperatorPhrase(op) {
+            if (op === '>') return 'more than';
+            if (op === '>=') return 'more than or equal to';
+            if (op === '<') return 'less than';
+            if (op === '<=') return 'less than or equal to';
+            return String(op || '');
+        }
+
+        async function sendRuleEmail(payload) {
+            try {
+                await fetch('/api/notifications/email/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } catch (e) {
+                console.warn('Rule email send failed:', e);
+            }
+        }
+
+        async function evaluateBehaviorAlertRules(deveui, sensorName, latestDecoded, latestTimeIso) {
+            const cfg = await loadAlertRulesConfig();
+            const rules = Array.isArray(cfg.rules) ? cfg.rules : [];
+            if (!rules.length || !latestDecoded || typeof latestDecoded !== 'object') return;
+            const nowMs = Date.now();
+
+            for (let i = 0; i < rules.length; i++) {
+                const rule = rules[i] || {};
+                if (!rule.enabled) continue;
+                if (rule.deveui && String(rule.deveui).trim() && String(rule.deveui).trim() !== deveui) continue;
+                const ruleId = String(rule.id || `${i}`);
+                const runtimeKey = `${ruleId}|${deveui}`;
+                const runtime = alertRuleRuntime[runtimeKey] || { lastValue: null, activeSince: 0, lastAlertAt: 0 };
+                const field = String(rule.field || '').trim();
+                if (!field) continue;
+                const currentVal = latestDecoded[field];
+                if (currentVal === undefined || currentVal === null) continue;
+                const cooldownMs = Math.max(0, Number(rule.cooldown_min ?? 0)) * 60000;
+                let shouldAlert = false;
+                let alertMessage = '';
+
+                if (rule.type === 'state_change') {
+                    const prev = runtime.lastValue;
+                    const changed = prev !== null && prev !== undefined
+                        && String(prev).toLowerCase() !== String(currentVal).toLowerCase();
+                    if (changed && (nowMs - runtime.lastAlertAt >= cooldownMs)) {
+                        shouldAlert = true;
+                        alertMessage = `${field} changed from ${prev} to ${currentVal}`;
+                    }
+                    runtime.lastValue = currentVal;
+                } else if (rule.type === 'threshold_duration') {
+                    const op = String(rule.operator || '>');
+                    const threshold = Number(rule.threshold || 0);
+                    const durationMs = Math.max(0, Number(rule.duration_sec || 0)) * 1000;
+                    const lhs = toComparable(currentVal);
+                    const rhs = toComparable(threshold);
+                    const met = (typeof lhs === 'number' && typeof rhs === 'number') ? compareWithOperator(lhs, op, rhs) : false;
+                    const opWords = thresholdOperatorPhrase(op);
+                    if (met) {
+                        if (!runtime.activeSince) runtime.activeSince = nowMs;
+                        const activeFor = nowMs - runtime.activeSince;
+                        if (activeFor >= durationMs && (nowMs - runtime.lastAlertAt >= cooldownMs)) {
+                            shouldAlert = true;
+                            alertMessage = `${field} stayed ${opWords} ${threshold} for ${Math.round(activeFor / 1000)}s (current=${currentVal})`;
+                        }
+                    } else {
+                        runtime.activeSince = 0;
+                    }
+                    runtime.lastValue = currentVal;
+                }
+
+                if (shouldAlert) {
+                    const subject = `SensorToolset Alert: ${sensorName ? sensorName + ' (' + deveui + ')' : deveui} - ${rule.name || rule.type}`;
+                    const body = [
+                        'Sensor rule alert from SensorToolset.',
+                        '',
+                        `Sensor: ${sensorName ? sensorName + ' (' + deveui + ')' : deveui}`,
+                        `Rule: ${rule.name || ruleId}`,
+                        `Type: ${rule.type}`,
+                        `Detail: ${alertMessage}`,
+                        `Timestamp: ${latestTimeIso || new Date().toISOString()}`
+                    ].join('\n');
+                    await sendRuleEmail({ subject, body });
+                    runtime.lastAlertAt = nowMs;
+                }
+
+                alertRuleRuntime[runtimeKey] = runtime;
+            }
         }
 
         function loadScript(src) {
@@ -2234,9 +2411,9 @@
             return chart;
         }
 
-        async function renderSensorDashboard(deveui) {
+        async function renderSensorDashboard(deveui, preloadedMessages = null) {
             currentDevEUI = deveui;
-            let allMessages = await getSensorMessages(deveui);
+            let allMessages = Array.isArray(preloadedMessages) ? preloadedMessages : await getSensorMessages(deveui);
             if (allMessages.length === 0) {
                 lastRenderedMarker = '';
                 document.getElementById('sensorContent').innerHTML = '<div class="no-data">No data available for this sensor</div>';
@@ -2615,6 +2792,12 @@
 
             const deviceName = deviceNamesMap[deveuiToKey(deveui)];
             const sensorTitle = deviceName ? (deviceName + ' (' + deveui + ')') : deveui;
+            const previousStatus = lastStatusByDevEui[deveui];
+            if (previousStatus !== status.status) {
+                lastStatusByDevEui[deveui] = status.status;
+                maybeSendStatusEmail(deveui, deviceName, status);
+            }
+            evaluateBehaviorAlertRules(deveui, deviceName, latestDecoded, latestMsg && latestMsg.time ? latestMsg.time : '');
             let html = `<div class="sensor-card">
                 <div class="sensor-header">
                     <h3 style="display:flex; align-items:center; gap: 8px; flex-wrap: wrap;">
@@ -3248,14 +3431,14 @@
                 if (!currentDevEUI || liveSyncInFlight) return;
                 liveSyncInFlight = true;
                 try {
-                    const merged = await syncPersistentCache(1000);
+                    const merged = await syncPersistentCache(250);
                     if (merged > 0) {
                         await populateSensorList();
                     }
                     const messages = await getSensorMessages(currentDevEUI);
                     const marker = getLatestMessageMarker(messages);
                     if (marker && marker !== lastRenderedMarker) {
-                        await renderSensorDashboard(currentDevEUI);
+                        await renderSensorDashboard(currentDevEUI, messages);
                     }
                 } catch (err) {
                     console.warn('Live sync check failed:', err);
@@ -3308,13 +3491,12 @@
 
                 document.getElementById('refreshBtn').addEventListener('click', async () => {
                     await fetchDeviceNames();
-                    await syncPersistentCache(5000);
+                    await syncPersistentCache(1500);
                     await populateSensorList();
                     if (currentDevEUI) {
                         await renderSensorDashboard(currentDevEUI);
                     }
                 });
-
                 var tempUnitRadios = document.querySelectorAll('input[name="tempUnit"]');
                 var currentTempUnit = getTempUnit();
                 tempUnitRadios.forEach(function(r) {

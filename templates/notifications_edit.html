@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Edit notification - Sensor Toolkit</title>
+
+    <link rel="stylesheet" href="/static/styles.css">
+
+    <style>
+
+        .panel { margin: 20px 0; padding: 15px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; }
+
+        .panel h3 { margin-top: 0; color: #00394d; }
+
+        .form-group { margin-bottom: 14px; max-width: 480px; }
+
+        .form-group label { display: block; margin-bottom: 4px; font-weight: bold; color: #00394d; font-size: 14px; }
+
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
+
+        .form-hint { font-size: 12px; color: #555; margin-top: 4px; line-height: 1.35; }
+
+        .help-guide {
+
+            font-size: 13px; color: #333; background: #f0f7fa; border: 1px solid #c5dce3; border-radius: 4px;
+
+            padding: 12px 14px; margin-bottom: 18px; max-width: 560px; line-height: 1.45;
+
+        }
+
+        .help-guide strong { color: #00394d; }
+
+        .help-guide ol { margin: 8px 0 0 1.1em; padding: 0; }
+
+        .help-guide li { margin-bottom: 6px; }
+
+        .section-divider { border: 0; border-top: 1px solid #e0e0e0; margin: 18px 0; }
+
+    </style>
+
+</head>
+
+<body>
+
+    <header>
+
+        <div class="container">
+
+            <div class="my-logo">
+
+                <img src="MultiTech_Logo.png" alt="MultiTech Logo">
+
+                <h1 id="pageTitle">Add notification</h1>
+
+            </div>
+
+        </div>
+
+    </header>
+
+
+
+    <nav>
+
+        <div class="nav-leftside">
+
+            <ul>
+
+                <li class="item"><img src="/static/icons/house.svg" width="24" height="24" class="icon-margin" alt="Home"><a href="index.html">Home</a></li>
+
+                <li class="item"><img src="/static/icons/box-arrow-in-down.svg" width="24" height="24" class="icon-margin" alt="Uplinks"><a href="uplinks.html">Uplinks</a></li>
+
+                <li class="item"><img src="/static/icons/gear-wide-connected.svg" width="24" height="24" class="icon-margin" alt="Downlinks"><a href="downlinks.html">Send Downlinks</a></li>
+
+                <li class="item"><img src="/static/icons/hub.svg" width="24" height="24" class="icon-margin" alt="RadioBridge"><a href="radiobridge.html">RadioBridge Config</a></li>
+
+                <li class="item"><img src="/static/icons/bar-chart.svg" width="24" height="24" class="icon-margin" alt="Sensor Monitor"><a href="sensors.html">Sensor Monitor</a></li>
+
+                <li class="item"><img src="/static/icons/upload.svg" width="24" height="24" class="icon-margin" alt="Sensor Library"><a href="decoders.html">Sensor Library</a></li>
+
+                <li class="item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-margin" style="vertical-align: middle;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg><a href="cloud_integrations.html">Cloud Integrations</a></li>
+
+                <li class="item active"><img src="/static/icons/chat-right-text.svg" width="24" height="24" class="icon-margin" alt="Notifications"><a href="/notifications">Notifications</a></li>
+
+            </ul>
+
+        </div>
+
+        <div class="nav-profile">
+
+            <p>&copy; 2026 Multitech Systems, Inc.</p>
+
+            <p>All rights reserved.</p>
+
+        </div>
+
+    </nav>
+
+
+
+    <section>
+
+        <div class="container">
+
+            <p style="margin: 0 0 12px;"><a href="/notifications" style="color: #00394d;">← Back to notifications</a></p>
+
+
+
+            <div class="help-guide">
+
+                <strong>How to configure alerts</strong>
+
+                <ol>
+
+                    <li>Set up email under <strong>Notifications → Configure delivery</strong> (recipient and SMTP). Alerts are sent from the Sensor Monitor page while it is open and receiving uplinks.</li>
+
+                    <li>Choose a <strong>sensor</strong> so the toolkit can list decoded fields from recent traffic.</li>
+
+                    <li><strong>State change</strong> — pick one field; an email is sent when that field’s value differs from the <em>previous uplink</em> for this sensor (the first packet after you open the page establishes the baseline).</li>
+
+                    <li><strong>Threshold + duration</strong> — pick a field, how it should compare to a number, a threshold, and how long the condition must stay true before one email is sent.</li>
+
+                </ol>
+
+            </div>
+
+
+
+            <div class="panel">
+
+                <h3>Alert rule</h3>
+
+
+
+                <div class="form-group">
+
+                    <label for="ruleName">1. Rule name</label>
+
+                    <input id="ruleName" type="text" placeholder="e.g. Freezer door opened">
+
+                </div>
+
+
+
+                <div class="form-group">
+
+                    <label for="ruleSensorSelect">2. Sensor</label>
+
+                    <select id="ruleSensorSelect">
+
+                        <option value="">Select a sensor…</option>
+
+                    </select>
+
+                    <p class="form-hint">Fields below are filled from the last uplinks cached on the server for that device.</p>
+
+                </div>
+
+
+
+                <div class="form-group">
+
+                    <label for="ruleType">3. When to notify</label>
+
+                    <select id="ruleType">
+
+                        <option value="state_change">State change (value differs from previous uplink)</option>
+
+                        <option value="threshold_duration">Threshold + duration (value stays past a limit)</option>
+
+                    </select>
+
+                </div>
+
+
+
+                <hr class="section-divider">
+
+
+
+                <div class="form-group">
+
+                    <label for="ruleField">4. Decoded field to watch</label>
+
+                    <select id="ruleField">
+
+                        <option value="">Select a sensor in step 2 first</option>
+
+                    </select>
+
+                    <p id="fieldHintState" class="form-hint" style="display: none;">An email is sent when this field changes compared to the last uplink for this sensor.</p>
+
+                    <p id="fieldHintThreshold" class="form-hint" style="display: none;">The rule evaluates this numeric field on each uplink.</p>
+
+                </div>
+
+
+
+                <div id="thresholdOptions" style="display: none;">
+
+                    <div class="form-group">
+
+                        <label for="ruleOperator">5. Comparison</label>
+
+                        <select id="ruleOperator">
+
+                            <option value=">">more than</option>
+
+                            <option value=">=">more than or equal to</option>
+
+                            <option value="<">less than</option>
+
+                            <option value="<=">less than or equal to</option>
+
+                        </select>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label for="ruleThreshold">6. Threshold value</label>
+
+                        <input id="ruleThreshold" type="number" step="any" placeholder="80">
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label for="ruleDurationSec">7. How long (seconds) the condition must stay true</label>
+
+                        <input id="ruleDurationSec" type="number" value="300" min="0">
+
+                        <p class="form-hint">Timer resets if the value moves back within range before the duration elapses.</p>
+
+                    </div>
+
+                </div>
+
+
+
+                <div style="margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+
+                    <button type="button" id="saveRuleBtn" style="padding: 8px 14px;">Save rule</button>
+
+                    <span id="editStatus" style="font-size: 13px; color: #666;"></span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <script>
+
+        const editId = new URLSearchParams(window.location.search).get('id');
+
+        let rulesConfig = { quiet_hours: {}, escalation: {}, rules: [] };
+
+        let sensorFieldMap = {};
+
+        let sensorNameMap = {};
+
+
+
+        function norm(d) {
+
+            return String(d || '').toLowerCase().replace(/-/g, '');
+
+        }
+
+
+
+        function updateRuleTypeUi() {
+
+            const type = document.getElementById('ruleType').value;
+
+            const thresholdEl = document.getElementById('thresholdOptions');
+
+            const hintState = document.getElementById('fieldHintState');
+
+            const hintTh = document.getElementById('fieldHintThreshold');
+
+            const isThreshold = type === 'threshold_duration';
+
+            thresholdEl.style.display = isThreshold ? 'block' : 'none';
+
+            hintState.style.display = !isThreshold ? 'block' : 'none';
+
+            hintTh.style.display = isThreshold ? 'block' : 'none';
+
+        }
+
+
+
+        function collectRuleFromForm() {
+
+            const type = document.getElementById('ruleType').value;
+
+            const deveui = document.getElementById('ruleSensorSelect').value.trim();
+
+            const rid = editId || (typeof crypto !== 'undefined' && crypto.randomUUID
+
+                ? crypto.randomUUID()
+
+                : ('r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)));
+
+            const existing = (rulesConfig.rules || []).find((x) => String(x.id) === String(rid));
+
+            const enabled = existing && existing.enabled === false ? false : true;
+
+            const base = {
+
+                id: rid,
+
+                name: document.getElementById('ruleName').value.trim(),
+
+                enabled: enabled,
+
+                deveui: deveui,
+
+                type: type,
+
+                field: document.getElementById('ruleField').value.trim(),
+
+            };
+
+            if (type === 'threshold_duration') {
+
+                base.operator = document.getElementById('ruleOperator').value;
+
+                base.threshold = Number(document.getElementById('ruleThreshold').value || 0);
+
+                base.duration_sec = Number(document.getElementById('ruleDurationSec').value || 0);
+
+            }
+
+            return base;
+
+        }
+
+
+
+        function mergeRuleForSave(newRule) {
+
+            const merged = { ...(rulesConfig.rules || []).find((x) => String(x.id) === String(newRule.id)) || {}, ...newRule };
+
+            ['state_value', 'cooldown_min', 'escalation_after_min'].forEach((k) => delete merged[k]);
+
+            if (merged.type === 'state_change') {
+
+                delete merged.operator;
+
+                delete merged.threshold;
+
+                delete merged.duration_sec;
+
+            }
+
+            return merged;
+
+        }
+
+
+
+        function updateFieldOptionsForSensor() {
+
+            const sensorSelect = document.getElementById('ruleSensorSelect');
+
+            const fieldSelect = document.getElementById('ruleField');
+
+            const deveui = (sensorSelect.value || '').trim();
+
+            const fields = deveui && sensorFieldMap[deveui] ? sensorFieldMap[deveui] : [];
+
+            fieldSelect.innerHTML = '';
+
+            if (!deveui) {
+
+                fieldSelect.innerHTML = '<option value="">Select a sensor in step 2 first</option>';
+
+                return;
+
+            }
+
+            if (!fields.length) {
+
+                fieldSelect.innerHTML = '<option value="">No fields detected yet — leave Sensor Monitor open to receive uplinks</option>';
+
+                return;
+
+            }
+
+            const frag = document.createDocumentFragment();
+
+            fields.forEach((f, idx) => {
+
+                const o = document.createElement('option');
+
+                o.value = f;
+
+                o.textContent = f;
+
+                if (idx === 0) o.selected = true;
+
+                frag.appendChild(o);
+
+            });
+
+            fieldSelect.appendChild(frag);
+
+        }
+
+
+
+        async function loadSensorDropdownAndFields() {
+
+            try {
+
+                const [sensorsRes, namesRes, cacheRes] = await Promise.all([
+
+                    fetch('/get_sensors'),
+
+                    fetch('/api/device-names'),
+
+                    fetch('/api/uplinks/persistent-cache?limit=5000'),
+
+                ]);
+
+                const sensorsData = await sensorsRes.json().catch(() => ({}));
+
+                const namesData = await namesRes.json().catch(() => ({}));
+
+                const cacheData = await cacheRes.json().catch(() => ({}));
+
+                const list = Array.isArray(sensorsData.sensors) ? sensorsData.sensors : [];
+
+                const names = namesData.names || {};
+
+                const msgs = Array.isArray(cacheData.messages) ? cacheData.messages : [];
+
+                sensorNameMap = {};
+
+                Object.keys(names).forEach((k) => { sensorNameMap[norm(k)] = names[k]; });
+
+
+
+                const knownDevs = [];
+
+                const seen = new Set();
+
+                list.forEach((s) => {
+
+                    const d = String((s && s.DevEUI) || '').trim();
+
+                    if (d && !seen.has(d)) {
+
+                        seen.add(d);
+
+                        knownDevs.push(d);
+
+                    }
+
+                });
+
+
+
+                const exclude = new Set([
+
+                    'deveui', 'dev_eui', 'device_eui', 'time', 'current_time', 'topic', 'event', 'fport', 'port',
+
+                    'payload_hex', 'payload_base64', 'payload', 'payload_len', 'protocol_version', 'packet_count',
+
+                    'snr', 'rssi', 'freq', 'chan', 'rfch', 'datr', 'codr',
+
+                ]);
+
+                sensorFieldMap = {};
+
+                msgs.forEach((m) => {
+
+                    const data = (m && m.data && typeof m.data === 'object') ? m.data : m;
+
+                    if (!data || typeof data !== 'object') return;
+
+                    const dev = String(data.deveui || data.dev_eui || data.DevEUI || '').trim();
+
+                    if (!dev) return;
+
+                    if (!sensorFieldMap[dev]) sensorFieldMap[dev] = new Set();
+
+                    Object.keys(data).forEach((k) => {
+
+                        const key = String(k || '').trim();
+
+                        if (!key) return;
+
+                        if (exclude.has(key.toLowerCase())) return;
+
+                        sensorFieldMap[dev].add(key);
+
+                    });
+
+                });
+
+                Object.keys(sensorFieldMap).forEach((d) => {
+
+                    sensorFieldMap[d] = Array.from(sensorFieldMap[d]).sort();
+
+                });
+
+
+
+                const sensorSelect = document.getElementById('ruleSensorSelect');
+
+                sensorSelect.innerHTML = '<option value="">Select a sensor…</option>';
+
+                knownDevs.sort().forEach((deveui) => {
+
+                    const key = norm(deveui);
+
+                    const display = sensorNameMap[key] ? `${sensorNameMap[key]} (${deveui})` : deveui;
+
+                    const o = document.createElement('option');
+
+                    o.value = deveui;
+
+                    o.textContent = display;
+
+                    sensorSelect.appendChild(o);
+
+                });
+
+                sensorSelect.addEventListener('change', () => {
+
+                    updateFieldOptionsForSensor();
+
+                });
+
+                updateFieldOptionsForSensor();
+
+            } catch (e) {
+
+                document.getElementById('editStatus').textContent = 'Could not load sensors / fields';
+
+            }
+
+        }
+
+
+
+        function applyRuleToForm(rule) {
+
+            document.getElementById('ruleName').value = rule.name || '';
+
+            document.getElementById('ruleSensorSelect').value = rule.deveui || '';
+
+            updateFieldOptionsForSensor();
+
+            document.getElementById('ruleField').value = rule.field || '';
+
+            document.getElementById('ruleType').value = rule.type || 'state_change';
+
+            document.getElementById('ruleOperator').value = rule.operator || '>';
+
+            document.getElementById('ruleThreshold').value = rule.threshold != null ? rule.threshold : '';
+
+            document.getElementById('ruleDurationSec').value = rule.duration_sec != null ? rule.duration_sec : 300;
+
+            updateRuleTypeUi();
+
+        }
+
+
+
+        async function loadRulesAndMaybeRule() {
+
+            const r = await fetch('/api/notifications/rules');
+
+            const d = await r.json().catch(() => ({}));
+
+            const c = d.config || {};
+
+            rulesConfig = {
+
+                quiet_hours: c.quiet_hours || {},
+
+                escalation: c.escalation || {},
+
+                rules: Array.isArray(c.rules) ? c.rules : [],
+
+            };
+
+            if (editId) {
+
+                const rule = rulesConfig.rules.find((x) => String(x.id) === String(editId));
+
+                if (rule) {
+
+                    document.getElementById('pageTitle').textContent = 'Edit notification';
+
+                    applyRuleToForm(rule);
+
+                } else {
+
+                    document.getElementById('editStatus').textContent = 'Rule not found; creating a new one.';
+
+                }
+
+            } else {
+
+                updateRuleTypeUi();
+
+            }
+
+        }
+
+
+
+        async function saveRule() {
+
+            const statusEl = document.getElementById('editStatus');
+
+            const raw = collectRuleFromForm();
+
+            if (!raw.name) {
+
+                statusEl.textContent = 'Please enter a rule name.';
+
+                return;
+
+            }
+
+            if (!raw.deveui) {
+
+                statusEl.textContent = 'Please select a sensor.';
+
+                return;
+
+            }
+
+            if (!raw.field) {
+
+                statusEl.textContent = 'Please select a decoded field.';
+
+                return;
+
+            }
+
+            const newRule = mergeRuleForSave(raw);
+
+            const rules = Array.isArray(rulesConfig.rules) ? [...rulesConfig.rules] : [];
+
+            const idx = rules.findIndex((x) => String(x.id) === String(newRule.id));
+
+            if (idx >= 0) rules[idx] = newRule;
+
+            else rules.push(newRule);
+
+            rulesConfig.rules = rules;
+
+            statusEl.textContent = 'Saving…';
+
+            try {
+
+                const r = await fetch('/api/notifications/rules', {
+
+                    method: 'POST',
+
+                    headers: { 'Content-Type': 'application/json' },
+
+                    body: JSON.stringify(rulesConfig),
+
+                });
+
+                const d = await r.json().catch(() => ({}));
+
+                if (!r.ok || !d.success) {
+
+                    statusEl.textContent = d.error || 'Save failed';
+
+                    return;
+
+                }
+
+                statusEl.textContent = 'Saved — returning to list…';
+
+                window.location.href = '/notifications';
+
+            } catch (e) {
+
+                statusEl.textContent = 'Save failed';
+
+            }
+
+        }
+
+
+
+        document.addEventListener('DOMContentLoaded', async () => {
+
+            await loadSensorDropdownAndFields();
+
+            await loadRulesAndMaybeRule();
+
+            document.getElementById('ruleType').addEventListener('change', updateRuleTypeUi);
+
+            document.getElementById('saveRuleBtn').addEventListener('click', saveRule);
+
+        });
+
+    </script>
+
+</body>
+
+</html>
+

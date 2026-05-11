@@ -221,94 +221,106 @@ function remove_packages {
 function post_install {
     echo "Starting post_install"
     logger -t Install "Starting post_install"
-    
-    # Check if requirements.txt exists
-    REQ_FILE="${APP_DIR}/requirements.txt"
-    if [ ! -f "$REQ_FILE" ]; then
-        echo "ERROR: requirements.txt not found: $REQ_FILE"
-        logger -t Install "ERROR: requirements.txt not found: $REQ_FILE"
-        return 1
-    fi
-    
-    echo "Found requirements.txt at: $REQ_FILE"
-    logger -t Install "Found requirements.txt at: $REQ_FILE"
-    cat "$REQ_FILE" | logger -t Install
-    
-    # Find pip3 - prefer python3 -m pip since pip3 command may not be in PATH
-    PIP3_CMD=""
-    
-    # First try python3 -m pip (most reliable on embedded systems)
-    if python3 -m pip --version >/dev/null 2>&1; then
-        PIP3_CMD="python3 -m pip"
-        echo "Using python3 -m pip"
-        logger -t Install "Using python3 -m pip"
-    elif command -v pip3 >/dev/null 2>&1; then
-        PIP3_CMD="pip3"
-        echo "Using pip3 command"
-        logger -t Install "Using pip3 command"
-    elif [ -f /usr/bin/pip3 ]; then
-        PIP3_CMD="/usr/bin/pip3"
-        echo "Using /usr/bin/pip3"
-        logger -t Install "Using /usr/bin/pip3"
+
+    # If a frozen executable is bundled, skip pip dependency installation.
+    # This enables fully offline install on the gateway.
+    FROZEN_BIN="${APP_DIR}/RadioBridgeTools"
+    if [ -f "$FROZEN_BIN" ]; then
+        chmod +x "$FROZEN_BIN" 2>/dev/null || true
+        echo "Found bundled frozen executable at: $FROZEN_BIN"
+        echo "Skipping pip dependency installation (offline mode)."
+        logger -t Install "Found bundled frozen executable: $FROZEN_BIN"
+        logger -t Install "Skipping pip dependency installation (offline mode)"
     else
-        # Last resort - try python3 -m pip even if version check failed
-        echo "WARNING: pip3 not found via standard methods, trying python3 -m pip anyway"
-        logger -t Install "WARNING: pip3 not found via standard methods, trying python3 -m pip anyway"
-        PIP3_CMD="python3 -m pip"
-    fi
     
-    echo "Using pip command: $PIP3_CMD"
-    logger -t Install "Using pip command: $PIP3_CMD"
-    
-    # Verify pip works and show version
-    PIP_VERSION=$($PIP3_CMD --version 2>&1)
-    PIP_VER_RC=$?
-    if [ $PIP_VER_RC -eq 0 ]; then
-        echo "pip version: $PIP_VERSION"
-        logger -t Install "pip version: $PIP_VERSION"
-    else
-        echo "WARNING: Could not get pip version, but will attempt to use it anyway"
-        logger -t Install "WARNING: Could not get pip version: $PIP_VERSION"
-        echo "Attempting to use pip despite version check failure..."
-        logger -t Install "Attempting to use pip despite version check failure..."
-    fi
-    
-    # Install Python dependencies - try with --user first, then without
-    echo "Installing Python dependencies from requirements.txt"
-    logger -t Install "Installing Python dependencies from requirements.txt"
-    
-    # Try --user install first (safer, doesn't require root)
-    echo "Attempting installation with --user flag..."
-    logger -t Install "Attempting installation with --user flag..."
-    INSTALL_OUTPUT=$($PIP3_CMD install --user -r "$REQ_FILE" 2>&1)
-    RETURNCODE=$?
-    echo "$INSTALL_OUTPUT"
-    echo "$INSTALL_OUTPUT" | logger -t Install
-    
-    # If --user fails, try without --user (requires root/sudo)
-    if [ $RETURNCODE -ne 0 ]; then
-        echo "Install with --user failed (status $RETURNCODE), trying system-wide install"
-        logger -t Install "Install with --user failed (status $RETURNCODE), trying system-wide install"
-        INSTALL_OUTPUT=$($PIP3_CMD install -r "$REQ_FILE" 2>&1)
+        # Check if requirements.txt exists
+        REQ_FILE="${APP_DIR}/requirements.txt"
+        if [ ! -f "$REQ_FILE" ]; then
+            echo "ERROR: requirements.txt not found: $REQ_FILE"
+            logger -t Install "ERROR: requirements.txt not found: $REQ_FILE"
+            return 1
+        fi
+        
+        echo "Found requirements.txt at: $REQ_FILE"
+        logger -t Install "Found requirements.txt at: $REQ_FILE"
+        cat "$REQ_FILE" | logger -t Install
+        
+        # Find pip3 - prefer python3 -m pip since pip3 command may not be in PATH
+        PIP3_CMD=""
+        
+        # First try python3 -m pip (most reliable on embedded systems)
+        if python3 -m pip --version >/dev/null 2>&1; then
+            PIP3_CMD="python3 -m pip"
+            echo "Using python3 -m pip"
+            logger -t Install "Using python3 -m pip"
+        elif command -v pip3 >/dev/null 2>&1; then
+            PIP3_CMD="pip3"
+            echo "Using pip3 command"
+            logger -t Install "Using pip3 command"
+        elif [ -f /usr/bin/pip3 ]; then
+            PIP3_CMD="/usr/bin/pip3"
+            echo "Using /usr/bin/pip3"
+            logger -t Install "Using /usr/bin/pip3"
+        else
+            # Last resort - try python3 -m pip even if version check failed
+            echo "WARNING: pip3 not found via standard methods, trying python3 -m pip anyway"
+            logger -t Install "WARNING: pip3 not found via standard methods, trying python3 -m pip anyway"
+            PIP3_CMD="python3 -m pip"
+        fi
+        
+        echo "Using pip command: $PIP3_CMD"
+        logger -t Install "Using pip command: $PIP3_CMD"
+        
+        # Verify pip works and show version
+        PIP_VERSION=$($PIP3_CMD --version 2>&1)
+        PIP_VER_RC=$?
+        if [ $PIP_VER_RC -eq 0 ]; then
+            echo "pip version: $PIP_VERSION"
+            logger -t Install "pip version: $PIP_VERSION"
+        else
+            echo "WARNING: Could not get pip version, but will attempt to use it anyway"
+            logger -t Install "WARNING: Could not get pip version: $PIP_VERSION"
+            echo "Attempting to use pip despite version check failure..."
+            logger -t Install "Attempting to use pip despite version check failure..."
+        fi
+        
+        # Install Python dependencies - try with --user first, then without
+        echo "Installing Python dependencies from requirements.txt"
+        logger -t Install "Installing Python dependencies from requirements.txt"
+        
+        # Try --user install first (safer, doesn't require root)
+        echo "Attempting installation with --user flag..."
+        logger -t Install "Attempting installation with --user flag..."
+        INSTALL_OUTPUT=$($PIP3_CMD install --user -r "$REQ_FILE" 2>&1)
         RETURNCODE=$?
         echo "$INSTALL_OUTPUT"
         echo "$INSTALL_OUTPUT" | logger -t Install
-    fi
-    
-    # If installation succeeded, we're done - don't do strict verification
-    # The import test can fail due to Python path issues even when packages are installed
-    if [ $RETURNCODE -eq 0 ]; then
-        echo "pip3 install completed successfully (exit code: $RETURNCODE)"
-        logger -t Install "pip3 install completed successfully (exit code: $RETURNCODE)"
-        echo "Python dependencies installation completed"
-        logger -t Install "Python dependencies installation completed"
-    else
-        echo "ERROR: pip3 install failed with status $RETURNCODE"
-        logger -t Install "ERROR: pip3 install failed with status $RETURNCODE"
-        echo "Last installation output:"
-        echo "$INSTALL_OUTPUT"
-        echo "$INSTALL_OUTPUT" | logger -t Install
-        return 1
+        
+        # If --user fails, try without --user (requires root/sudo)
+        if [ $RETURNCODE -ne 0 ]; then
+            echo "Install with --user failed (status $RETURNCODE), trying system-wide install"
+            logger -t Install "Install with --user failed (status $RETURNCODE), trying system-wide install"
+            INSTALL_OUTPUT=$($PIP3_CMD install -r "$REQ_FILE" 2>&1)
+            RETURNCODE=$?
+            echo "$INSTALL_OUTPUT"
+            echo "$INSTALL_OUTPUT" | logger -t Install
+        fi
+        
+        # If installation succeeded, we're done - don't do strict verification
+        # The import test can fail due to Python path issues even when packages are installed
+        if [ $RETURNCODE -eq 0 ]; then
+            echo "pip3 install completed successfully (exit code: $RETURNCODE)"
+            logger -t Install "pip3 install completed successfully (exit code: $RETURNCODE)"
+            echo "Python dependencies installation completed"
+            logger -t Install "Python dependencies installation completed"
+        else
+            echo "ERROR: pip3 install failed with status $RETURNCODE"
+            logger -t Install "ERROR: pip3 install failed with status $RETURNCODE"
+            echo "Last installation output:"
+            echo "$INSTALL_OUTPUT"
+            echo "$INSTALL_OUTPUT" | logger -t Install
+            return 1
+        fi
     fi
     
     # Configure firewall to allow port 5000

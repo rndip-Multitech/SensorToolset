@@ -35,6 +35,8 @@ import urllib.error
 from urllib.parse import quote
 import ssl
 import base64
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -83,6 +85,8 @@ def _write_atomic(path: str, content: str) -> None:
 
 # Device name overrides (editable); gateway names come from /api/loraNetwork/whitelist or /api/lora/devices
 DEVICE_NAMES_FILE = os.path.join(get_data_root(), "device_names.json")
+EMAIL_NOTIFICATION_CONFIG_FILE = os.path.join(get_data_root(), "email_notifications.json")
+NOTIFICATION_RULES_FILE = os.path.join(get_data_root(), "notification_rules.json")
 
 
 def _is_safe_decoder_filename(name: str) -> bool:
@@ -157,6 +161,8 @@ config = {
     'host': '0.0.0.0',
     'port': 5000,
     'debug': False,
+    # Local dev helper: bypass login/session checks when True.
+    'auth_bypass': False,
     # RadioBridge decoder bundle URL (optional). If set, "Update Radiobridge library" will fetch from it.
     # Override via RADIOBRIDGE_DECODER_URL env var or config file key "radiobridge_decoder_url".
     # Leave empty until you have a real URL to avoid 502 errors.
@@ -176,6 +182,18 @@ def _get_radiobridge_decoder_url() -> str:
     if env_val:
         return env_val
     return str(config.get("radiobridge_decoder_url") or "").strip()
+
+
+def _is_auth_bypassed() -> bool:
+    """Return True when auth should be bypassed (for local development/testing only)."""
+    env_val = os.environ.get("SENSOR_TOOLKIT_NO_AUTH", "").strip().lower()
+    if env_val in ("1", "true", "yes", "on"):
+        return True
+    return bool(config.get("auth_bypass", False))
+
+
+def _is_logged_in() -> bool:
+    return _is_auth_bypassed() or ('username' in session)
 
 def _gateway_base_url(broker):
     """Gateway HTTP base URL from broker host (no port — uses default HTTP port)."""
@@ -256,6 +274,13 @@ def login():
     POST expects JSON: {"username": "...", "password": "...", "ip": "<gateway ip>"}.
     Authenticates against the gateway /api/login endpoint.
     """
+    if _is_auth_bypassed():
+        session['username'] = session.get('username') or 'dev-user'
+        session['boot_id'] = APP_BOOT_ID
+        if request.method == 'POST' and request.is_json:
+            return jsonify({'status': 'ok', 'redirect': url_for('index'), 'bypass': True}), 200
+        return redirect(url_for('index'))
+
     if request.method == 'POST':
         # Accept both JSON (Ajax) and form data (HTML form submit)
         if request.is_json:
@@ -308,6 +333,11 @@ def logout():
 @app.before_request
 def enforce_login_for_html_pages():
     """Require login for HTML pages, and invalidate stale sessions after restart."""
+    if _is_auth_bypassed():
+        session['username'] = session.get('username') or 'dev-user'
+        session['boot_id'] = APP_BOOT_ID
+        return None
+
     # Public routes/assets.
     if request.path.startswith('/static/') or request.path in ('/login', '/logout'):
         return None
@@ -331,7 +361,7 @@ def enforce_login_for_html_pages():
 @app.route('/index.html')
 def index():
     """Serve the main index page (requires login)."""
-    if 'username' not in session:
+    if not _is_logged_in():
         return redirect(url_for('login'))
     return send_file(os.path.join(TEMPLATES_DIR, "index.html"))
 
@@ -340,7 +370,7 @@ def index():
 @app.route('/downlinks.html')
 def downlinks_page():
     """Serve the downlinks page (requires login)."""
-    if 'username' not in session:
+    if not _is_logged_in():
         return redirect(url_for('login'))
     return send_file(os.path.join(TEMPLATES_DIR, "downlinks.html"))
 
@@ -355,7 +385,7 @@ def tools_downlinks_redirect():
 @app.route('/sensors.html')
 def sensors_page():
     """Serve the sensor monitoring page (requires login)."""
-    if 'username' not in session:
+    if not _is_logged_in():
         return redirect(url_for('login'))
     return send_file(os.path.join(TEMPLATES_DIR, "sensors.html"))
 
@@ -365,7 +395,7 @@ def sensors_page():
 @app.route('/rbs30x-abm.html')
 def abm_page():
     """Serve the RBS30X-ABM sensor configuration page (requires login)."""
-    if 'username' not in session:
+    if not _is_logged_in():
         return redirect(url_for('login'))
     return send_file(os.path.join(TEMPLATES_DIR, "RBS30X-ABM", "rbs30x-abm.html"))
 
@@ -522,6 +552,393 @@ def _save_device_name_overrides(overrides: Dict[str, str]) -> None:
         logger.warning(f"Could not save device names overrides: {e}")
 
 
+def _load_email_notification_config() -> Dict[str, Any]:
+    """Load SMTP/email notification config from disk."""
+    defaults: Dict[str, Any] = {
+        "enabled": False,
+        # When False, use gateway-reported SMTP (if available) for host/port/TLS/auth.
+        "use_custom_smtp": False,
+        "smtp_host": "",
+        "smtp_port": 587,
+        "smtp_user": "",
+        "smtp_pass": "",
+        "use_tls": True,
+        "from_email": "",
+        "to_email": "",
+    }
+    if not os.path.isfile(EMAIL_NOTIFICATION_CONFIG_FILE):
+        return defaults
+    try:
+        with open(EMAIL_NOTIFICATION_CONFIG_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return defaults
+        out = dict(defaults)
+        out.update(data)
+        return out
+    except Exception as e:
+        logger.warning(f"Could not load email notification config: {e}")
+        return defaults
+
+
+def _save_email_notification_config(config_data: Dict[str, Any]) -> None:
+    """Persist SMTP/email notification config to disk."""
+    try:
+        with open(EMAIL_NOTIFICATION_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save email notification config: {e}")
+
+
+def _sanitize_email_notification_config(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize/validate incoming email notification config payload."""
+    cfg = {
+        "enabled": bool(raw.get("enabled", False)),
+        "use_custom_smtp": bool(raw.get("use_custom_smtp", False)),
+        "smtp_host": str(raw.get("smtp_host") or "").strip(),
+        "smtp_port": int(raw.get("smtp_port") or 587),
+        "smtp_user": str(raw.get("smtp_user") or "").strip(),
+        "smtp_pass": str(raw.get("smtp_pass") or "").strip(),
+        "use_tls": bool(raw.get("use_tls", True)),
+        "from_email": str(raw.get("from_email") or "").strip(),
+        "to_email": str(raw.get("to_email") or "").strip(),
+    }
+    if cfg["smtp_port"] < 1 or cfg["smtp_port"] > 65535:
+        raise ValueError("smtp_port must be between 1 and 65535")
+    return cfg
+
+
+def _public_email_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return safe config for UI (hides SMTP password)."""
+    out = dict(config_data)
+    out["smtp_pass"] = ""
+    out["has_password"] = bool(config_data.get("smtp_pass"))
+    return out
+
+
+_GATEWAY_SMTP_CACHE: Dict[str, Any] = {"ts": 0.0, "profile": None}
+_GATEWAY_SMTP_CACHE_TTL_SEC = 25.0
+
+
+def _smtp_pass_is_placeholder(value: str) -> bool:
+    s = str(value or "").strip()
+    if not s:
+        return True
+    if "*" in s or s.lower() in ("hidden", "redacted", "********"):
+        return True
+    return False
+
+
+def _unwrap_nested_config(obj: Any) -> Dict[str, Any]:
+    """Unwrap common API wrappers (result/data/smtp/mail) when they hold SMTP-like keys."""
+    if not isinstance(obj, dict):
+        return {}
+    cur: Dict[str, Any] = obj
+    for _ in range(4):
+        keys_lower = {str(k).lower() for k in cur.keys()}
+        if any(
+            k in keys_lower
+            for k in (
+                "smtpserver",
+                "smtp_server",
+                "smtp_host",
+                "mailserver",
+                "mail_server",
+                "smtpport",
+                "smtp_port",
+            )
+        ) or any("smtp" in k for k in keys_lower):
+            return cur
+        moved = False
+        for wrap in ("result", "data", "smtp", "mail", "email", "config", "settings"):
+            inner = cur.get(wrap)
+            if isinstance(inner, dict):
+                cur = inner
+                moved = True
+                break
+        if not moved:
+            break
+    return cur
+
+
+def _coerce_bool(val: Any, default: bool = False) -> bool:
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return bool(val)
+    s = str(val).strip().lower()
+    if s in ("1", "true", "yes", "on", "enabled"):
+        return True
+    if s in ("0", "false", "no", "off", "disabled", ""):
+        return False
+    return default
+
+
+def _normalize_gateway_smtp_dict(raw: Any) -> Optional[Dict[str, Any]]:
+    """Extract a normalized SMTP profile from a gateway JSON object, or None."""
+    if not isinstance(raw, dict):
+        return None
+    d = _unwrap_nested_config(raw)
+    if not d:
+        return None
+
+    def pick_host() -> str:
+        for key in (
+            "smtp_host",
+            "smtpHost",
+            "SmtpHost",
+            "mail_server",
+            "mailServer",
+            "smtp_server",
+            "smtpServer",
+            "server",
+            "hostname",
+            "relay",
+            "smtpRelay",
+            "host",
+        ):
+            v = d.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return ""
+
+    def pick_port() -> int:
+        for key in ("smtp_port", "smtpPort", "port", "mailPort", "SmtpPort"):
+            v = d.get(key)
+            if v is None:
+                continue
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                continue
+        return 587
+
+    host = pick_host()
+    if not host:
+        return None
+
+    port = pick_port()
+    use_tls = _coerce_bool(d.get("use_tls", d.get("useTls", d.get("tls", d.get("starttls")))), True)
+    ssl_mode = str(d.get("ssl_mode", d.get("sslMode", d.get("security", ""))) or "").lower()
+    if port == 465:
+        use_tls = True
+    if ssl_mode in ("ssl", "smtps", "implicit"):
+        use_tls = True
+
+    user = str(d.get("smtp_user", d.get("smtpUser", d.get("username", d.get("user", "")))) or "").strip()
+    password = str(d.get("smtp_pass", d.get("smtpPassword", d.get("password", d.get("pass", "")))) or "").strip()
+
+    return {
+        "smtp_host": host,
+        "smtp_port": port,
+        "use_tls": use_tls,
+        "smtp_user": user,
+        "smtp_pass": password,
+    }
+
+
+def _http_get_json(url: str, timeout_sec: float = 1.2) -> Optional[Any]:
+    """GET JSON from localhost/gateway; returns parsed object or None."""
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        ctx = ssl.create_default_context()
+        if url.startswith("https://") and ("127.0.0.1" in url or "localhost" in url):
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(req, timeout=timeout_sec, context=ctx if url.startswith("https://") else None) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _fetch_gateway_smtp_profile_uncached() -> Optional[Dict[str, Any]]:
+    """Probe common MultiTech / gateway localhost REST paths for SMTP settings."""
+    paths = [
+        "/api/system/email",
+        "/api/system/mail",
+        "/api/system/smtp",
+        "/api/email/config",
+        "/api/email/smtp",
+        "/api/mail/settings",
+        "/api/mail/smtp",
+        "/api/smtp",
+        "/api/network/smtp",
+        "/api/v1/system/email",
+        "/api/v1/system/mail",
+    ]
+    bases = [
+        "http://127.0.0.1",
+        "http://localhost",
+        "https://127.0.0.1",
+        "https://localhost",
+    ]
+    for base in bases:
+        for path in paths:
+            url = base + path
+            data = _http_get_json(url, timeout_sec=1.0)
+            if data is None:
+                continue
+            profile = _normalize_gateway_smtp_dict(data)
+            if profile:
+                logger.info(f"Gateway SMTP profile loaded from {url}")
+                return profile
+    return None
+
+
+def _fetch_gateway_smtp_profile() -> Optional[Dict[str, Any]]:
+    now = time.monotonic()
+    if (
+        _GATEWAY_SMTP_CACHE["profile"] is not None
+        and now - float(_GATEWAY_SMTP_CACHE["ts"]) < _GATEWAY_SMTP_CACHE_TTL_SEC
+    ):
+        return _GATEWAY_SMTP_CACHE["profile"]  # type: ignore[return-value]
+    prof = _fetch_gateway_smtp_profile_uncached()
+    _GATEWAY_SMTP_CACHE["ts"] = now
+    _GATEWAY_SMTP_CACHE["profile"] = prof
+    return prof
+
+
+def _public_gateway_smtp_profile(gw: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not gw:
+        return None
+    out = {
+        "smtp_host": str(gw.get("smtp_host") or ""),
+        "smtp_port": int(gw.get("smtp_port") or 587),
+        "use_tls": bool(gw.get("use_tls", True)),
+        "smtp_user": str(gw.get("smtp_user") or ""),
+        "has_password": bool(gw.get("smtp_pass")) and not _smtp_pass_is_placeholder(str(gw.get("smtp_pass") or "")),
+    }
+    return out
+
+
+def _smtp_delivery_source_label(file_cfg: Dict[str, Any], gw: Optional[Dict[str, Any]]) -> str:
+    if file_cfg.get("use_custom_smtp"):
+        return "custom"
+    if gw and (str(gw.get("smtp_host") or "").strip()):
+        return "gateway"
+    if (str(file_cfg.get("smtp_host") or "").strip()):
+        return "app"
+    return "none"
+
+
+def _build_effective_email_config(stored: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge gateway SMTP (when allowed) with saved file config for sending."""
+    out = dict(stored)
+    if out.get("use_custom_smtp"):
+        return out
+    gw = _fetch_gateway_smtp_profile()
+    if not gw:
+        return out
+    gh = (str(gw.get("smtp_host") or "")).strip()
+    if not gh:
+        return out
+    out["smtp_host"] = gh
+    out["smtp_port"] = int(gw.get("smtp_port") or out.get("smtp_port") or 587)
+    if "use_tls" in gw:
+        out["use_tls"] = bool(gw.get("use_tls"))
+    gu = (str(gw.get("smtp_user") or "")).strip()
+    if gu:
+        out["smtp_user"] = gu
+    gp = (str(gw.get("smtp_pass") or "")).strip()
+    if gp and not _smtp_pass_is_placeholder(gp):
+        out["smtp_pass"] = gp
+    elif gu and (str(stored.get("smtp_pass") or "")).strip():
+        out["smtp_pass"] = str(stored.get("smtp_pass") or "")
+    return out
+
+
+def _send_email_notification(subject: str, body: str, config_data: Dict[str, Any]) -> None:
+    """Send email via SMTP using configured connection details."""
+    cfg = _build_effective_email_config(config_data)
+    smtp_host = str(cfg.get("smtp_host") or "").strip()
+    smtp_port = int(cfg.get("smtp_port") or 587)
+    smtp_user = str(cfg.get("smtp_user") or "").strip()
+    smtp_pass = str(cfg.get("smtp_pass") or "").strip()
+    use_tls = bool(cfg.get("use_tls", True))
+    from_email = str(cfg.get("from_email") or "").strip()
+    to_email = str(cfg.get("to_email") or "").strip()
+
+    missing = []
+    if not smtp_host:
+        missing.append("smtp_host")
+    if not from_email:
+        missing.append("from_email")
+    if not to_email:
+        missing.append("to_email")
+    if missing:
+        raise ValueError("Missing required email notification fields: " + ", ".join(missing))
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg.set_content(body)
+
+    ctx = ssl.create_default_context()
+    if smtp_port == 465 and use_tls:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15, context=ctx) as server:
+            if smtp_user:
+                if not smtp_pass:
+                    raise ValueError("smtp_pass is required when smtp_user is set")
+                server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        return
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+        if use_tls:
+            server.starttls(context=ctx)
+        if smtp_user:
+            if not smtp_pass:
+                raise ValueError("smtp_pass is required when smtp_user is set")
+            server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
+
+def _default_notification_rules() -> Dict[str, Any]:
+    return {
+        "quiet_hours": {
+            "enabled": False,
+            "start": "22:00",
+            "end": "06:00",
+            "timezone_offset_min": 0,
+        },
+        "escalation": {
+            "enabled": False,
+            "email": "",
+        },
+        "rules": [],
+    }
+
+
+def _load_notification_rules() -> Dict[str, Any]:
+    if not os.path.isfile(NOTIFICATION_RULES_FILE):
+        return _default_notification_rules()
+    try:
+        with open(NOTIFICATION_RULES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return _default_notification_rules()
+        out = _default_notification_rules()
+        out.update({k: v for k, v in data.items() if k in out})
+        if not isinstance(out.get("rules"), list):
+            out["rules"] = []
+        return out
+    except Exception as e:
+        logger.warning(f"Could not load notification rules config: {e}")
+        return _default_notification_rules()
+
+
+def _save_notification_rules(config_data: Dict[str, Any]) -> None:
+    try:
+        with open(NOTIFICATION_RULES_FILE, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save notification rules config: {e}")
+
+
 @app.route('/api/device-names', methods=['GET'])
 def get_device_names_route():
     """Return DevEUI -> display name map (gateway + local overrides; overrides take precedence)."""
@@ -643,6 +1060,170 @@ def get_messages_route():
         return jsonify({"messages": [], "error": str(e)}), 500
 
 
+def _invalidate_gateway_smtp_cache() -> None:
+    _GATEWAY_SMTP_CACHE["ts"] = 0.0
+    _GATEWAY_SMTP_CACHE["profile"] = None
+
+
+@app.route('/api/notifications/email-config', methods=['GET'])
+def get_email_notification_config_route():
+    """Return email notification config (with password redacted) and gateway SMTP discovery."""
+    file_cfg = _load_email_notification_config()
+    gw = _fetch_gateway_smtp_profile()
+    eff = _build_effective_email_config(file_cfg)
+    pub = _public_email_config(eff)
+    pub["use_custom_smtp"] = bool(file_cfg.get("use_custom_smtp"))
+    return jsonify(
+        {
+            "config": pub,
+            "gateway_detected": bool(gw and str(gw.get("smtp_host") or "").strip()),
+            "gateway_profile": _public_gateway_smtp_profile(gw),
+            "smtp_source": _smtp_delivery_source_label(file_cfg, gw),
+        }
+    ), 200
+
+
+@app.route('/api/notifications/email-config', methods=['POST'])
+def set_email_notification_config_route():
+    """Save email notification config."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        existing = _load_email_notification_config()
+        merged = dict(existing)
+        merged.update(data)
+        # Preserve existing password when UI sends empty value.
+        incoming_pass = data.get("smtp_pass")
+        if incoming_pass is None or str(incoming_pass).strip() == "":
+            merged["smtp_pass"] = existing.get("smtp_pass", "")
+        cfg = _sanitize_email_notification_config(merged)
+        _save_email_notification_config(cfg)
+        _invalidate_gateway_smtp_cache()
+        gw = _fetch_gateway_smtp_profile()
+        eff = _build_effective_email_config(cfg)
+        pub = _public_email_config(eff)
+        pub["use_custom_smtp"] = bool(cfg.get("use_custom_smtp"))
+        return jsonify(
+            {
+                "success": True,
+                "config": pub,
+                "gateway_detected": bool(gw and str(gw.get("smtp_host") or "").strip()),
+                "gateway_profile": _public_gateway_smtp_profile(gw),
+                "smtp_source": _smtp_delivery_source_label(cfg, gw),
+            }
+        ), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Set email notification config error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/notifications/email/test', methods=['POST'])
+def test_email_notification_route():
+    """Send a test email using saved SMTP config."""
+    try:
+        cfg = _load_email_notification_config()
+        subject = "SensorToolset: Test email notification"
+        body = (
+            "This is a test notification from SensorToolset.\n\n"
+            f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}\n"
+        )
+        _send_email_notification(subject, body, cfg)
+        return jsonify({"success": True}), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Test email notification error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/notifications/email/notify-status', methods=['POST'])
+def notify_email_sensor_status_route():
+    """Send an email status notification for a specific sensor event."""
+    try:
+        cfg = _load_email_notification_config()
+        if not cfg.get("enabled"):
+            return jsonify({"success": False, "error": "Email notifications are disabled"}), 400
+
+        data = request.get_json(force=True, silent=True) or {}
+        deveui = str(data.get("deveui") or "").strip()
+        status = str(data.get("status") or "").strip()
+        detail = str(data.get("detail") or "").strip()
+        sensor_name = str(data.get("sensor_name") or "").strip()
+        if not deveui or not status:
+            return jsonify({"success": False, "error": "deveui and status are required"}), 400
+
+        title_device = f"{sensor_name} ({deveui})" if sensor_name else deveui
+        subject = f"SensorToolset Alert: {title_device} is {status}"
+        body = (
+            "Sensor status alert from SensorToolset.\n\n"
+            f"Sensor: {title_device}\n"
+            f"Status: {status}\n"
+            f"Detail: {detail or 'n/a'}\n"
+            f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}\n"
+        )
+        _send_email_notification(subject, body, cfg)
+        return jsonify({"success": True}), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Email status notification error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/notifications/email/send', methods=['POST'])
+def send_custom_email_notification_route():
+    """Send a custom email notification (used by rule engine)."""
+    try:
+        cfg = _load_email_notification_config()
+        if not cfg.get("enabled"):
+            return jsonify({"success": False, "error": "Email notifications are disabled"}), 400
+        data = request.get_json(force=True, silent=True) or {}
+        subject = str(data.get("subject") or "").strip()
+        body = str(data.get("body") or "").strip()
+        to_email = str(data.get("to_email") or "").strip()
+        if not subject or not body:
+            return jsonify({"success": False, "error": "subject and body are required"}), 400
+        send_cfg = dict(cfg)
+        if to_email:
+            send_cfg["to_email"] = to_email
+        _send_email_notification(subject, body, send_cfg)
+        return jsonify({"success": True}), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Custom email notification error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/notifications/rules', methods=['GET'])
+def get_notification_rules_route():
+    """Return notification rule/quiet-hours/escalation configuration."""
+    return jsonify({"config": _load_notification_rules()}), 200
+
+
+@app.route('/api/notifications/rules', methods=['POST'])
+def set_notification_rules_route():
+    """Save notification rule/quiet-hours/escalation configuration."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Invalid payload"}), 400
+        cfg = _default_notification_rules()
+        cfg.update({k: v for k, v in data.items() if k in ("quiet_hours", "escalation", "rules")})
+        if not isinstance(cfg.get("quiet_hours"), dict):
+            cfg["quiet_hours"] = _default_notification_rules()["quiet_hours"]
+        if not isinstance(cfg.get("escalation"), dict):
+            cfg["escalation"] = _default_notification_rules()["escalation"]
+        if not isinstance(cfg.get("rules"), list):
+            cfg["rules"] = []
+        _save_notification_rules(cfg)
+        return jsonify({"success": True, "config": cfg}), 200
+    except Exception as e:
+        logger.error(f"Set notification rules error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route('/api/uplinks/persistent-cache', methods=['GET'])
 def get_persistent_uplink_cache_route():
     """Return messages from the server-side persistent uplink cache (received even when browser was closed)."""
@@ -651,7 +1232,30 @@ def get_persistent_uplink_cache_route():
             return jsonify({"messages": []}), 200
         limit = request.args.get('limit', 5000, type=int)
         limit = min(max(1, limit), 10000)
+        since = (request.args.get('since') or '').strip()
         messages = read_persistent_uplink_cache(limit=limit)
+        if since:
+            try:
+                since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+                filtered = []
+                for msg in messages:
+                    msg_time = (
+                        (msg.get("data") or {}).get("current_time")
+                        if isinstance(msg.get("data"), dict)
+                        else msg.get("time")
+                    ) or msg.get("time")
+                    if not msg_time:
+                        continue
+                    try:
+                        msg_dt = datetime.fromisoformat(str(msg_time).replace("Z", "+00:00"))
+                    except Exception:
+                        continue
+                    if msg_dt > since_dt:
+                        filtered.append(msg)
+                messages = filtered
+            except Exception:
+                # Ignore invalid "since" values and fall back to full response.
+                pass
         return jsonify({"messages": messages}), 200
     except Exception as e:
         logger.error(f"Error reading persistent uplink cache: {e}")
@@ -949,7 +1553,7 @@ except ImportError as e:
 @app.route('/cloud_integrations')
 def cloud_integrations_page():
     """Serve the cloud integrations page (requires login)."""
-    if 'username' not in session:
+    if not _is_logged_in():
         return redirect(url_for('login'))
     return send_file(os.path.join(TEMPLATES_DIR, "cloud_integrations.html"))
 
@@ -960,10 +1564,37 @@ def cloud_integrations_html():
     return cloud_integrations_page()
 
 
+@app.route('/notifications')
+@app.route('/notifications.html')
+def notifications_page():
+    """Serve the notifications page (requires login)."""
+    if not _is_logged_in():
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "notifications.html"))
+
+
+@app.route('/notifications/delivery')
+@app.route('/notifications/delivery.html')
+def notifications_delivery_page():
+    """Email transport (gateway vs custom SMTP) configuration."""
+    if not _is_logged_in():
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "notifications_delivery.html"))
+
+
+@app.route('/notifications/edit')
+@app.route('/notifications/edit.html')
+def notifications_edit_page():
+    """Add or edit a single notification rule."""
+    if not _is_logged_in():
+        return redirect(url_for('login'))
+    return send_file(os.path.join(TEMPLATES_DIR, "notifications_edit.html"))
+
+
 @app.route('/uplinks.html')
 def uplinks_page():
     """Serve the uplinks page (requires login)."""
-    if 'username' not in session:
+    if not _is_logged_in():
         return redirect(url_for('login'))
     return send_file(os.path.join(TEMPLATES_DIR, "uplinks.html"))
 
@@ -971,7 +1602,7 @@ def uplinks_page():
 @app.route('/decoders.html')
 def decoders_page():
     """Serve the decoders page (requires login)."""
-    if 'username' not in session:
+    if not _is_logged_in():
         return redirect(url_for('login'))
     return send_file(os.path.join(TEMPLATES_DIR, "decoders.html"))
 

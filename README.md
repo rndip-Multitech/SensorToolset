@@ -35,6 +35,18 @@ RadioBridgeTools/
    - Run `Install postinstall` to install Python dependencies
    - Run `Start start` to start the application
 
+**Offline / frozen executable (recommended for no-internet deployments):**
+
+1. Build the frozen binary on a Linux environment matching your gateway architecture (e.g. ARMv7 vs ARM64):
+   - `chmod +x ./build_frozen.sh`
+   - `./build_frozen.sh`
+2. Confirm a `RadioBridgeTools` executable exists at repo root.
+3. Package the application directory into a tar.gz (including `RadioBridgeTools`).
+4. Upload via the mPower web interface.
+5. During install:
+   - `Install postinstall` detects `RadioBridgeTools` and skips pip internet installs.
+   - `Start` launches the bundled executable automatically.
+
 *Application  takes several minutes to install.
 Open an input firewall filter to allow access to tcp port from your config(default:5000)
 
@@ -74,10 +86,13 @@ The `Start` script handles the application lifecycle:
 - python3-multiprocessing
 - python3-mmap
 
-### Python Dependencies (current iteration does require internet access to install)
+### Python Dependencies (source-mode install path)
 - flask~=3.0.3
 - werkzeug~=3.0.3
 - jinja2~=3.1.4
+
+### Frozen Build Tooling
+- `pyinstaller` (used by `build_frozen.sh` and `RadioBridgeTools.spec`)
 
 ## Accessing the Application
 
