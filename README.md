@@ -50,6 +50,12 @@ RadioBridgeTools/
 *Application  takes several minutes to install.
 
 ***Open an input firewall filter to allow access to tcp port from your config(default:5000)***
+![alt text](./inputfilterrules.png)
+
+
+Running application 
+
+![alt text](./runningapp.png)
 
 ## Configuration
 
