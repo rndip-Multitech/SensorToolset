@@ -48,7 +48,8 @@ RadioBridgeTools/
    - `Start` launches the bundled executable automatically.
 
 *Application  takes several minutes to install.
-Open an input firewall filter to allow access to tcp port from your config(default:5000)
+
+***Open an input firewall filter to allow access to tcp port from your config(default:5000)***
 
 ## Configuration
 
